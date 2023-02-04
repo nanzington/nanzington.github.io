@@ -1,3 +1,10 @@
 html {
     background-color: paleturquoise;
+    min-width: 100%;
+}
+
+.code_block {
+    background-color: darkgray;
+    white-space: pre-wrap; 
+    border: 2px black solid;
 }
