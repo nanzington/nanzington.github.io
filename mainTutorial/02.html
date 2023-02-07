@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Core 02 - Basic Movement</title>
+    <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>    Like the chapter name says, the main goal this time is to get a map interface set up and put a player-controlled
+    unit onto it. To ensure that we don't have to throw away most of the code later, we'll set up a few classes that are
+    going to be important as we move onto further gameplay mechanics. Namely we need an Actor - an enemy or player, Tiles, a World,
+    a Map, and a Map UI. <b>Actor.cs</b>.</p>
+
+    <h1>1. Entities/Actor.cs</h1>
+    <p>    First up: basic Actors. Create a new folder in your project (next to the UI folder) called "Entities",
+    and a file inside of it called <b>Actor.cs</b>. Eventually we'll need to add more to it, but for now let's just make it
+    inherit from SadConsole.Entities.Entity and add the constructor that needs. Making this an Entity essentially means it's a
+    single tile console, and we can make it display by adding it to our (eventual) Map interface console. Note the following code:</p>
+    <div class="code_block">
+        using SadConsole.Entities;
+        using SadRogue.Primitives;
+
+        namespace SadTutorial.Entities {
+            public class Actor : Entity { 
+                public Actor(Color fore, Color back, int glyph) : base(fore, back, glyph, 0) {
+
+                }
+            }
+        } 
+    </div>
+    <p>    Short and sweet. Over the next few chapters we'll be coming back to this, but for now let's move on to Tile.</p>
+
+    <h1>2. Tile.cs</h1>
+    <p>    Tiles will inherit from SadConsole.ColoredGlyph - an actual individual Cell that makes up the surface of a Console.
+    We don't have a lot of other data we need these tiles to carry just yet besides their colors, glyph, name, and whether they
+    block move or vision. This leaves is with a pretty simple code block (for now):</p>
+    <div class="code_block">
+        using SadConsole;
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial {
+            public class Tile : ColoredGlyph {
+                public string Name;
+                public bool blockMove = false;
+                public bool blockVision = false;
+
+                public Tile(string name, bool move, bool vis, Color fore, Color back, int glyph) : base(fore, back, glyph) {
+                    Name = name;
+                    blockMove = move;
+                    blockVision = vis;
+                }
+            }
+        } 
+    </div>
+
+    <h1>3. Map.cs</h1>
+    <p>    Create a file in your root project directory (with GameLoop.cs) called <b>Map.cs</b>. For now this will be another
+    fairly simple file - all we really need it to do is hold the local map, an array of Tile objects, and manage some basic functions
+    to test if tiles are walkable. Later each map will also store the list of local enemies and items, but for now we just need
+    the tiles. For a little ease of use we'll also add a method for getting the tile at a point, and for our eventual pathfinding
+    algorithm we need a way to check if a tile is walkable. Here's the code for this section:</p>
+    <div class="code_block">
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial {
+            public class Map {
+                public Tile[] Tiles;
+                public int Width;
+                public int Height;
+
+                public Map(int w, int h) {
+                    Width = w;
+                    Height = h;
+                    Tiles = new Tile[Width * Height];
+
+                    for (int x = 0; x < Width; x++) {
+                        for (int y = 0; y < Height; y++) {
+                            if (x == 0 || x == Width - 1 || y == 0 || y == Height - 1) {
+                                Tiles[new Point(x, y).ToIndex(Width)] = new Tile("Wall", true, true, Color.Gray, Color.Black, '#');
+                            } else {
+                                Tiles[new Point(x, y).ToIndex(Width)] = new Tile("Floor", false, false, Color.DarkGray, Color.Black, '.');
+                            }
+                        }
+                    } 
+                }
+
+
+                public Tile? TileAt(Point point) {
+                    int index = point.ToIndex(Width);
+                    if (index >= 0 && index <= Tiles.Length) {
+                        return Tiles[index];
+                    }
+                    return null;
+                }
+
+                public bool IsTileWalkable(Point point) {
+                    int index = point.ToIndex(Width);
+                    if (index >= 0 && index <= Tiles.Length) {
+                        return !Tiles[index].blockMove;
+                    }
+                    return false;
+                }
+
+            }
+        }
+
+    </div>
+    <p>    We're quickly closing in on our chapter goal of a map we can move around in! Only noteworthy thing here is that we need
+    to store the Width for point-to-index conversions (x + (y * width)), we don't technically need to store Height just yet but we
+    might as well since we've got it in the constructor. Continuing along our quick implementations quest, create <b>World.cs</b> in
+    root project directory.</p>
+
+    <h1>4. World.cs</h1>
+    <p>    Eventually World will hold almost all of our active game data, but for now we only need it to store two things: the Map,
+    and our Player object. Both of those things handle a lot of their own initialization, so all we have to do is fill the objects in
+    our World constructor. The code:</p>
+    <div class="code_block">
+        using SadRogue.Primitives;
+        using SadTutorial.Entities; 
+
+        namespace SadTutorial {
+            public class World {
+                public Map CurrentMap;
+                public Actor Player;
+
+                public World() {
+                    CurrentMap = new(GameLoop.MapWidth, GameLoop.MapHeight);
+                    Player = new(Color.HotPink, Color.Black, '@');
+                    Player.Position = new Point(5, 5);
+                }
+            }
+        } 
+    </div>
+    <p>    Again super short and simple. The only interesting thing we're doing here is creating an instance of our Actor class to
+    serve as the player object. Later we may create a separate Player class if we need to keep track of stats players have and enemies
+    don't, but for now Actor is good enough. We pass in the foreground color (I chose Color.HotPink, but you can choose anything you like),
+    the background color, and the symbol to represent it - in typical roguelike fashion I used an @ symbol, but any symbol works. We also
+    set the Position to (5, 5) so that our Player doesn't spawn inside of where our walls around the edge of the map are. Next up, create 
+    a file in your UI folder called <b>UI_Map.cs</b>.</p>
+
+    <h1>5. UI/UI_Map.cs</h1>
+    <p>    We've already got all the pieces ready for this in last chapter, so we'll get straight to the code and I'll explain the differences
+    from what you might expect.</p>
+    <div class="code_block">
+        using SadConsole;
+        using SadConsole.Entities;
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial.UI {
+            public class UI_Map : InstantUI {
+                public Renderer entityRenderer;
+
+
+                public UI_Map(int width, int height) : base(width, height, "Map", "") {
+                    Con = new SadConsole.Console(new CellSurface(GameLoop.MapWidth, GameLoop.MapHeight, GameLoop.World.CurrentMap.Tiles), GameLoop.SquareFont);
+
+                    Win = new(new CellSurface(width, height), GameLoop.SquareFont);
+
+                    Con.UsePixelPositioning = true;
+                    Con.Position = new Point(12, 12);
+
+                    Win.IsVisible = true;
+                    Win.UsePixelPositioning = true;
+                    Win.Position = new Point(277, 0);
+                    Win.CanDrag = false;
+                    Win.Title = "";
+
+                    entityRenderer = new();
+                    Con.SadComponents.Add(entityRenderer);
+                    entityRenderer.Add(GameLoop.World.Player);
+
+
+                    Win.Children.Add(Con);
+                    GameLoop.UIManager.Children.Add(Win);
+                }
+
+                public override void Update() {
+                    
+                }
+            }
+        } 
+    </div>
+    <p>    So we're using our InstantUI again, but with even more changes than our Sidebar had. First and foremost we have to remake the
+    Con and Win variables and tell them to use our GameLoop.SquareFont, otherwise the tiles would be rectangular. If you prefer or don't mind
+    the map being rectangles you can skip down to <b>Win.IsVisible = true;</b>, remove <b>Win.UsePixelPositioning = true;</b>, and change the
+    Position for the Window to (41, 0). Our first line in the constructor tells the console to use our Map tiles as the start of the surface,
+    which makes it actually visible. Very important note here: if you call <b>Con.Clear();</b>, like InstantUI does in the base definition for
+    Update(), then the map will not be visible, as it is only drawn once. I'll cover some other workarounds for this in <a href="./02alt.html">Chapter 2 Alternate</a>,
+    but in this Chapter we'll just override Update() with an empty body so it doesn't clear the screen.</p>
+
+    <p>    The other important aspect here is our Renderer, named entityRenderer to better illustrate its purpose. As our name suggests,
+    entityRenderer tracks all Entities (for example, any Actors we make) to determine whether they should be visible on the screen or not,
+    based on their position and the currently shown area of the map. Any entities not added to the renderer won't be visible, so after we
+    initialize it and add it as a component to our Map console, we add our Player object from GameLoop.World. Finally, it's time to use our
+    new classes by adding a few lines to UIManager.</p>
+
+    <h1>6. UI/UIManager.cs (Additions)</h1>
+    <p>    First thing we need to do is right under our Sidebar gets initialized in the Init() method, add a line of code initializing our
+    map:</p>
+    <div class="code_block">UI_Map Map = new(GameLoop.MapWidth + 2, GameLoop.MapHeight + 2);</div>
+    <p>    And to our Update function, add some lines of code for movement controls right above <b>Helper.ClearKeys();</b>:</p>
+    <div class="code_block"> 
+        if (Helper.KeyPressed(Key.W)) { GameLoop.World.Player.TryMove(0, -1); }
+        if (Helper.KeyPressed(Key.S)) { GameLoop.World.Player.TryMove(0, 1); }
+        if (Helper.KeyPressed(Key.A)) { GameLoop.World.Player.TryMove(-1, 0); }
+        if (Helper.KeyPressed(Key.D)) { GameLoop.World.Player.TryMove(1, 0); }
+    </div> 
+    <p>    Finally over in GameLoop.cs, change our GameWidth to 147, GameHeight to 50, MapWidth to 60, and MapHeight to 35. You can play
+    with these numbers to get the window space you want, but the listed numbers here should give at least a decent area to work with,
+    with things more or less lined up together. When you run the game you should now see our map screen with a pink @ sign (or any color
+    and symbol combo you chose) in a gray ascii room, controllable by WASD. Picture provided below for comparison, along with the usual
+    complete code files.</p>
+    <img src="../resources/img/CoreCh2 - Map.png" alt="Core Chapter 2 - Map and Player">
+
+    <p>    Wow, that was a long chapter! Maybe felt longer than it was because of all the new files, but either way we've made huge actual
+    progress towards having a game. Next chapter we'll work on slightly more interesting map generation, so stay tuned!</p>
+
+    <button type="button" class="collapsible"><b>Complete</b> Entities/Actor.cs</button>
+    <div class="hidden_block">
+        using SadConsole.Entities;
+        using SadRogue.Primitives;
+
+        namespace SadTutorial.Entities {
+            public class Actor : Entity { 
+                public Actor(Color fore, Color back, int glyph) : base(fore, back, glyph, 0) {
+
+                }
+
+                public void TryMove(int dx, int dy) {
+                    if (GameLoop.World.CurrentMap.IsTileWalkable(Position + new Point(dx, dy))) {
+                        Position += new Point(dx, dy);
+                    }
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+    <button type="button" class="collapsible"><b>Complete</b> Tile.cs</button>
+    <div class="hidden_block">
+        using SadConsole;
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial {
+            public class Tile : ColoredGlyph {
+                public string Name;
+                public bool blockMove = false;
+                public bool blockVision = false;
+
+                public Tile(string name, bool move, bool vis, Color fore, Color back, int glyph) : base(fore, back, glyph) {
+                    Name = name;
+                    blockMove = move;
+                    blockVision = vis;
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+
+    <button type="button" class="collapsible"><b>Complete</b> Map.cs</button>
+    <div class="hidden_block">
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial {
+            public class Map {
+                public Tile[] Tiles;
+                public int Width;
+                public int Height;
+
+                public Map(int w, int h) {
+                    Width = w;
+                    Height = h;
+                    Tiles = new Tile[Width * Height];
+
+                    for (int x = 0; x < Width; x++) {
+                        for (int y = 0; y < Height; y++) {
+                            if (x == 0 || x == Width - 1 || y == 0 || y == Height - 1) {
+                                Tiles[new Point(x, y).ToIndex(Width)] = new Tile("Wall", true, true, Color.Gray, Color.Black, '#');
+                            } else {
+                                Tiles[new Point(x, y).ToIndex(Width)] = new Tile("Floor", false, false, Color.DarkGray, Color.Black, '.');
+                            }
+                        }
+                    } 
+                }
+
+
+                public Tile? TileAt(Point point) {
+                    int index = point.ToIndex(Width);
+                    if (index >= 0 && index <= Tiles.Length) {
+                        return Tiles[index];
+                    }
+                    return null;
+                }
+
+                public bool IsTileWalkable(Point point) {
+                    int index = point.ToIndex(Width);
+                    if (index >= 0 && index <= Tiles.Length) {
+                        return !Tiles[index].blockMove;
+                    }
+                    return false;
+                }
+
+            }
+        } 
+    </div>
+    <br><br>
+
+
+    <button type="button" class="collapsible"><b>Complete</b> World.cs</button>
+    <div class="hidden_block">
+        using SadRogue.Primitives;
+        using SadTutorial.Entities; 
+
+        namespace SadTutorial {
+            public class World {
+                public Map CurrentMap;
+                public Actor Player;
+
+                public World() {
+                    CurrentMap = new(GameLoop.MapWidth, GameLoop.MapHeight);
+                    Player = new(Color.HotPink, Color.Black, '@');
+                    Player.Position = new Point(5, 5);
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+
+    <button type="button" class="collapsible"><b>Complete</b> UI/UI_Map.cs</button>
+    <div class="hidden_block">
+        using SadConsole;
+        using SadConsole.Entities;
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial.UI {
+            public class UI_Map : InstantUI {
+                public Renderer entityRenderer;
+
+
+                public UI_Map(int width, int height) : base(width, height, "Map", "") {
+                    Con = new SadConsole.Console(new CellSurface(GameLoop.MapWidth, GameLoop.MapHeight, GameLoop.World.CurrentMap.Tiles), GameLoop.SquareFont);
+
+                    Win = new(new CellSurface(width, height), GameLoop.SquareFont);
+
+                    Con.UsePixelPositioning = true;
+                    Con.Position = new Point(12, 12);
+
+                    Win.IsVisible = true;
+                    Win.UsePixelPositioning = true;
+                    Win.Position = new Point(277, 0);
+                    Win.CanDrag = false;
+                    Win.Title = "";
+
+                    entityRenderer = new();
+                    Con.SadComponents.Add(entityRenderer);
+                    entityRenderer.Add(GameLoop.World.Player);
+
+
+                    Win.Children.Add(Con);
+                    GameLoop.UIManager.Children.Add(Win);
+                }
+
+                public override void Update() {
+                    
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+    <button type="button" class="collapsible"><b>Complete Updated</b> GameLoop.cs</button>
+    <div class="hidden_block">
+        using SadConsole;
+        using SadRogue.Primitives;
+        using SadTutorial.UI;
+        using Console = SadConsole.Console;
+
+        namespace SadTutorial {
+            class GameLoop {
+                public const int GameWidth = 147;
+                public const int GameHeight = 50;
+                public const int MapWidth = 60;
+                public const int MapHeight = 35;
+
+                public static SadFont SquareFont;
+
+                public static UIManager UIManager;
+
+                public static World World;
+
+                static void Main(string[] args) {
+                    // Setup the engine and create the main window. 
+                    Game.Create(GameWidth, GameHeight, "./fonts/ThinExtended.font");
+
+                    // Hook the start event so we can add consoles to the system.
+                    Game.Instance.OnStart = Init;
+
+                    // Start the game.
+                    Game.Instance.Run();
+                    Game.Instance.Dispose();
+                }
+
+                private static void Init() { SquareFont = (SadFont)GameHost.Instance.LoadFont("./fonts/CheepicusExtended.font"); 
+                    Game.Instance.MonoGameInstance.Window.Title = "SadTutorial";
+
+                    World = new();
+                    
+                    UIManager = new();
+
+
+
+                    UIManager.Init();
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+    <button type="button" class="collapsible"><b>Complete Updated</b> UI/UIManager.cs</button>
+    <div class="hidden_block">
+        using SadConsole;
+        using SadConsole.UI;
+        using SadRogue.Primitives; 
+        using Key = SadConsole.Input.Keys;
+
+        namespace SadTutorial.UI {
+            public class UIManager : ScreenObject {
+                public SadConsole.UI.Colors CustomColors;
+                public Dictionary<string, InstantUI> Interfaces = new();
+
+                public UIManager() {
+                    IsVisible = true;
+                    IsFocused = true;
+                    UseMouse = true;
+                    Parent = GameHost.Instance.Screen;
+                }
+
+                public override void Update(TimeSpan timeElapsed) {
+                    foreach(KeyValuePair<string, InstantUI> kv in Interfaces) {
+                        if (kv.Value.Win.IsVisible) {
+                            kv.Value.Update();
+                            kv.Value.Input();
+                        }
+                    }
+
+                    if (Helper.KeyPressed(Key.W)) { GameLoop.World.Player.TryMove(0, -1); }
+                    if (Helper.KeyPressed(Key.S)) { GameLoop.World.Player.TryMove(0, 1); }
+                    if (Helper.KeyPressed(Key.A)) { GameLoop.World.Player.TryMove(-1, 0); }
+                    if (Helper.KeyPressed(Key.D)) { GameLoop.World.Player.TryMove(1, 0); }
+
+
+                    Helper.ClearKeys();
+                    base.Update(timeElapsed);
+                }
+
+                public void Init() {
+                    SetupCustomColors();
+
+                    UI_Sidebar Sidebar = new(40, 50);
+                    UI_Map Map = new(GameLoop.MapWidth + 2, GameLoop.MapHeight + 2);
+                }
+
+
+                private void SetupCustomColors() {
+                    CustomColors = SadConsole.UI.Colors.CreateAnsi();
+                    CustomColors.ControlHostBackground = new AdjustableColor(Color.Black, "Black");
+                    CustomColors.Lines = new AdjustableColor(Color.White, "White");
+                    CustomColors.Title = new AdjustableColor(Color.White, "White");
+
+                    CustomColors.RebuildAppearances();
+                    SadConsole.UI.Themes.Library.Default.Colors = CustomColors;
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+
+
+
+
+    <h2><a href="./02alt.html">Chapter 02 Alternate: Different Map Setups</a></h2>
+    <h2><a href="./03.html">Chapter 03: Map Generation</a></h2>
+    <h2><a href="../index.html">Back to Index</a></h2>
+    <script src="../javascript.js"></script>
+</body>
+</html>
