@@ -1,18 +1,7 @@
-html {
-    background-color: paleturquoise;
-    min-width: 100%;
-} 
-
-p {
-    white-space: pre-wrap;
-}
-
 .code_block {
-    background-color: darkgray;
+    background-color: darkslategray;
     white-space: pre-wrap; 
-    border: 2px black solid;
-    max-width: 70%;
-    margin-left: 5%;
+    border: 2px black solid; 
 }
 
 .collapsible {
@@ -38,7 +27,7 @@ p {
     padding: 0 18px;
     display: none;
     overflow: hidden;
-    background-color: darkgray;
+    background-color: darkslategray;
     white-space: pre-wrap; 
     border: 2px black solid;
     max-width: 80%;

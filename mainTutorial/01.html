@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SadTutorial Core 01 - Some Foundational Work</title>
     <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
 </head>
 <body>
     <h1>0. Chapter Goals</h1>
@@ -22,45 +23,45 @@
     folder in your project called UI. Inside of this folder create a file called "<b>UIManager.cs</b>". Put the following code into it
     (replace SadTutorial with your project name/namespace):
         <div class="code_block">
-            using SadConsole;
-            using SadConsole.UI;
-            using SadRogue.Primitives; 
+        using SadConsole;
+        using SadConsole.UI;
+        using SadRogue.Primitives; 
 
-            namespace SadTutorial.UI {
-                public class UIManager : ScreenObject {
-                    public SadConsole.UI.Colors CustomColors;
+        namespace SadTutorial.UI {
+            public class UIManager : ScreenObject {
+                public SadConsole.UI.Colors CustomColors;
 
-                    public UIManager() {
-                        IsVisible = true;
-                        IsFocused = true;
-                        UseMouse = true;
-                        Parent = GameHost.Instance.Screen;
-                        
-                        Init();
-                    }
-
-                    public override void Update(TimeSpan timeElapsed) {
-
-                        base.Update(timeElapsed);
-                    }
-
-                    public void Init() {
-                        SetupCustomColors();
-
-                    }
-
-
-                    private void SetupCustomColors() {
-                        CustomColors = SadConsole.UI.Colors.CreateAnsi();
-                        CustomColors.ControlHostBackground = new AdjustableColor(Color.Black, "Black");
-                        CustomColors.Lines = new AdjustableColor(Color.White, "White");
-                        CustomColors.Title = new AdjustableColor(Color.White, "White");
-
-                        CustomColors.RebuildAppearances();
-                        SadConsole.UI.Themes.Library.Default.Colors = CustomColors;
-                    }
+                public UIManager() {
+                    IsVisible = true;
+                    IsFocused = true;
+                    UseMouse = true;
+                    Parent = GameHost.Instance.Screen;
+                    
+                    Init();
                 }
-            } 
+
+                public override void Update(TimeSpan timeElapsed) {
+
+                    base.Update(timeElapsed);
+                }
+
+                public void Init() {
+                    SetupCustomColors();
+
+                }
+
+
+                private void SetupCustomColors() {
+                    CustomColors = SadConsole.UI.Colors.CreateAnsi();
+                    CustomColors.ControlHostBackground = new AdjustableColor(Color.Black, "Black");
+                    CustomColors.Lines = new AdjustableColor(Color.White, "White");
+                    CustomColors.Title = new AdjustableColor(Color.White, "White");
+
+                    CustomColors.RebuildAppearances();
+                    SadConsole.UI.Themes.Library.Default.Colors = CustomColors;
+                }
+            }
+        } 
         </div>
     </p>
 
@@ -641,9 +642,10 @@
     </div> 
 
 
-    
-    <h2><a href="./02.html">Chapter 02: Basic Movement</a></h2>
-    <h2><a href="../index.html">Back to Index</a></h2>
+    <p>
+    <a href="./02.html">Chapter 02: Basic Movement</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
     <script src="../javascript.js"></script>
 </body>
 </html>
