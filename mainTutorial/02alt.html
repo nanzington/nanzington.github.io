@@ -28,7 +28,7 @@
 
         namespace SadTutorial {
             public class Map {
-                public Dictionary<Point, Tile> Tiles;
+                public Dictionary&lt;Point, Tile&gt; Tiles;
                 public int Width;
                 public int Height;
         
@@ -199,7 +199,7 @@
         namespace SadTutorial.UI {
             public class UIManager : ScreenObject {
                 public SadConsole.UI.Colors CustomColors;
-                public Dictionary<string, InstantUI> Interfaces = new();
+                public Dictionary&lt;string, InstantUI&gt; Interfaces = new();
 
                 public UIManager() {
                     IsVisible = true;
@@ -314,7 +314,7 @@
 
         namespace SadTutorial {
             public class World {
-                public Dictionary<Point, Map> MapLibrary; 
+                public Dictionary&lt;Point, Map&gt; MapLibrary; 
                 public Actor Player;
 
                 public World() {
@@ -462,7 +462,7 @@
         namespace SadTutorial.UI {
             public class UIManager : ScreenObject {
                 public SadConsole.UI.Colors CustomColors;
-                public Dictionary<string, InstantUI> Interfaces = new();
+                public Dictionary&lt;string, InstantUI&gt; Interfaces = new();
 
                 public UIManager() {
                     IsVisible = true;
