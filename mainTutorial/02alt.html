@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Core 02 Alternate - Different Map Setups</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>This optional chapter presents a few ways to handle the map interface and data. Generally speaking
+    if you ask ten people to solve a programming problem they'll solve it ten different ways, so these are
+    by no means comprehensive. However, I think they cover a couple of the ways people might prefer for their
+    projects, so I'm including a set of brief notes on them to help people get started. Future chapters will not
+    use any of these alternate methods, but may include a small note about how the code differs if you went with one
+    of these methods. Follow Chapter 2 as normal, then follow the instructions in a following section.</p>
+
+    <h1>1. Infinite Map</h1>
+    <p>This style requires surprisingly few changes to the existing code to work, and is also one of the most likely things
+    for someone to want to be able to do. First major change is that we'll use a Dictionary&lt;Point, Tile&gt; in our 
+    <b>Map.cs</b> file, in place of the Tile array. To interact properly with this we also need to change the loop that sets
+    Tiles in the array to adding them to the Dictionary, with their point as the key. We also have to alter our GetTile and
+    IsTileWalkable methods to correctly access the Dictionary. The amended code:</p>
+    <div class="code_block">
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial {
+            public class Map {
+                public Dictionary<Point, Tile> Tiles;
+                public int Width;
+                public int Height;
+        
+                public Map(int w, int h) {
+                    Width = w;
+                    Height = h;
+                    Tiles = new();
+        
+                    for (int x = 0; x < Width; x++) {
+                        for (int y = 0; y < Height; y++) {
+                            if (x == 0 || x == Width - 1 || y == 0 || y == Height - 1) {
+                                Tiles.Add(new Point(x, y), new Tile("Wall", true, true, Color.Gray, Color.Black, '#'));
+                            } else {
+                                Tiles.Add(new Point(x, y), new Tile("Floor", false, false, Color.DarkGray, Color.Black, '.'));
+                            }
+                        }
+                    } 
+                }
+        
+        
+                public Tile TileAt(Point point) {
+                    if (Tiles.ContainsKey(point))
+                        return Tiles[point];
+                    return new Tile("Void", true, false, Color.Black, Color.Black, ' ');
+                }
+        
+                public bool IsTileWalkable(Point point) {
+                    if (Tiles.ContainsKey(point))
+                        return !Tiles[point].blockMove;
+                    return false;
+                }
+        
+            }
+        } 
+    </div>
+
+    <p>And the other file we have to change is our UI_Map, where we have to draw the tiles immediately surrounding our player and the
+    player object iself. We can remove the reference to GameLoop.World.CurrentMap.Tiles when recreating the surface (though we still
+    need to recreate the surface to use the new font). We can also remove the entityRenderer and all references to it - it doesn't work
+    when we're playing with relative positions, as far as I'm aware. In our Update method we want to Clear the console and print the area
+    around the player, with the player always in the center. Your code should look something like this: </p>
+    <div class="code_block">
+        using SadConsole;
+        using SadConsole.Entities;
+        using SadRogue.Primitives; 
+
+        namespace SadTutorial.UI {
+            public class UI_Map : InstantUI { 
+                public UI_Map(int width, int height) : base(width, height, "Map", "") {
+                    Con = new SadConsole.Console(new CellSurface(GameLoop.MapWidth, GameLoop.MapHeight), GameLoop.SquareFont);
+
+                    Win = new(new CellSurface(width, height), GameLoop.SquareFont);
+
+                    Con.UsePixelPositioning = true;
+                    Con.Position = new Point(12, 12);
+
+                    Win.IsVisible = true;
+                    Win.UsePixelPositioning = true;
+                    Win.Position = new Point(277, 0);
+                    Win.CanDrag = false;
+                    Win.Title = ""; 
+
+
+                    Win.Children.Add(Con);
+                    GameLoop.UIManager.Children.Add(Win);
+                }
+
+                public override void Update() {
+                    Con.Clear();
+
+                    Point pos = GameLoop.World.Player.Position;
+                    
+
+                    int leftX = pos.X - (GameLoop.MapWidth / 2);
+                    int topY = pos.Y - (GameLoop.MapHeight / 2);
+
+                    Con.ViewPosition = new Point(leftX, topY);
+
+                    for (int x = leftX; x < leftX + GameLoop.MapWidth; x++) { 
+                        for (int y = topY; y < topY + GameLoop.MapHeight; y++) {
+                            Con.Print(x - leftX, y - topY, new ColoredString(GameLoop.World.CurrentMap.TileAt(new Point(x, y))));
+                        }
+                    }
+
+                    Con.Print(GameLoop.MapWidth / 2, GameLoop.MapHeight / 2, new ColoredString(GameLoop.World.Player.Appearance));
+                }
+            }
+        } 
+    </div>
+
+    <p>With the changes two these two files you should be largely done! You can save on the amount of computing done by
+    only calling the tile redraw only any time the player moves (unless you have the map changing without their input somehow), 
+    but it's not strictly necessary. Anyways here's a gif of it working and let's move on to the other map types.</p>
+    <img src="../resources/img/02alt - Infinite Map.gif" alt="">
+
+    <h1>2. Scrolling Finite Map</h1>
+    <p>This one is a surprisingly easy change - rename the MapHeight and MapWidth variables in GameLoop to MapConW and MapConH.
+    Create new variables using the old names (MapHeight, MapWidth) and set them to whatever you want the full map size to be.
+    Switch the creation of UI_Map in UIManager to use MapConW and MapConH, add these two lines to the bottom of your UI_Map constructor: </p>
+    <div class="code_block"> 
+        Con.ViewHeight = GameLoop.MapConH - 2;
+        Con.ViewWidth = GameLoop.MapConW - 2; 
+    </div>
+    <p>And these two lines to UI_Map.Update():</p>
+    <div class="code_block"> 
+        Point offset = new Point(GameLoop.MapConW / 2, GameLoop.MapConH / 2);
+        Con.ViewPosition = GameLoop.World.Player.Position - offset;
+    </div>
+    <p>And you're done! You should now have a larger room that will scroll as you walk towards the edges, stopping at the border of the tile
+    array. You'll have to write map generation code with the larger space in mind, but otherwise it's really not that hard of a change if you
+    want your map to work this way. You may notice the player icon flickering between two places as the map scrolls - if so, in UIManager, move
+    your checks for movement keys to <em>before</em> the iteration through the interface dictionary.</p> 
+ 
+
+    <button type="button" class="collapsible"><b>Altered</b> UI/UI_Map.cs</button>
+    <div class="hidden_block">
+        using SadConsole;
+        using SadConsole.Entities;
+        using SadRogue.Primitives;
+
+        namespace SadTutorial.UI {
+            public class UI_Map : InstantUI {
+                public Renderer entityRenderer;
+
+
+                public UI_Map(int width, int height) : base(width, height, "Map", "") {
+                    Con = new SadConsole.Console(new CellSurface(GameLoop.MapWidth, GameLoop.MapHeight, GameLoop.World.CurrentMap.Tiles), GameLoop.SquareFont);
+
+                    Win = new(new CellSurface(width, height), GameLoop.SquareFont);
+
+                    Con.UsePixelPositioning = true;
+                    Con.Position = new Point(12, 12);
+
+                    Win.IsVisible = true;
+                    Win.UsePixelPositioning = true;
+                    Win.Position = new Point(277, 0);
+                    Win.CanDrag = false;
+                    Win.Title = "";
+
+                    entityRenderer = new();
+                    Con.SadComponents.Add(entityRenderer);
+                    entityRenderer.Add(GameLoop.World.Player);
+
+                    Win.Children.Add(Con);
+                    GameLoop.UIManager.Children.Add(Win);
+
+
+                    Con.ViewHeight = GameLoop.MapConH - 2;
+                    Con.ViewWidth = GameLoop.MapConW - 2; 
+                }
+
+                public override void Update() {
+                    Point offset = new Point(GameLoop.MapConW / 2, GameLoop.MapConH / 2);
+                    Con.ViewPosition = GameLoop.World.Player.Position - offset;
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+    <button type="button" class="collapsible"><b>Altered</b> UI/UIManager.cs</button>
+    <div class="hidden_block">
+        using SadConsole;
+        using SadConsole.UI;
+        using SadRogue.Primitives; 
+        using Key = SadConsole.Input.Keys;
+
+        namespace SadTutorial.UI {
+            public class UIManager : ScreenObject {
+                public SadConsole.UI.Colors CustomColors;
+                public Dictionary<string, InstantUI> Interfaces = new();
+
+                public UIManager() {
+                    IsVisible = true;
+                    IsFocused = true;
+                    UseMouse = true;
+                    Parent = GameHost.Instance.Screen;
+                }
+
+                public override void Update(TimeSpan timeElapsed) {
+                    if (Helper.KeyPressed(Key.W)) { GameLoop.World.Player.TryMove(0, -1); }
+                    if (Helper.KeyPressed(Key.S)) { GameLoop.World.Player.TryMove(0, 1); }
+                    if (Helper.KeyPressed(Key.A)) { GameLoop.World.Player.TryMove(-1, 0); }
+                    if (Helper.KeyPressed(Key.D)) { GameLoop.World.Player.TryMove(1, 0); }
+
+
+
+                    foreach (KeyValuePair<string, InstantUI> kv in Interfaces) {
+                        if (kv.Value.Win.IsVisible) {
+                            kv.Value.Update();
+                            kv.Value.Input();
+                        }
+                    } 
+
+
+                    Helper.ClearKeys();
+                    base.Update(timeElapsed);
+                }
+
+                public void Init() {
+                    SetupCustomColors();
+
+                    UI_Sidebar Sidebar = new(40, 50);
+                    UI_Map Map = new(GameLoop.MapConW, GameLoop.MapConH);
+                }
+
+
+                private void SetupCustomColors() {
+                    CustomColors = SadConsole.UI.Colors.CreateAnsi();
+                    CustomColors.ControlHostBackground = new AdjustableColor(Color.Black, "Black");
+                    CustomColors.Lines = new AdjustableColor(Color.White, "White");
+                    CustomColors.Title = new AdjustableColor(Color.White, "White");
+
+                    CustomColors.RebuildAppearances();
+                    SadConsole.UI.Themes.Library.Default.Colors = CustomColors;
+                }
+            }
+        } 
+    </div>
+    <br><br>
+ 
+
+    <button type="button" class="collapsible"><b>Altered</b> GameLoop.cs</button>
+    <div class="hidden_block">
+        using SadConsole;
+        using SadRogue.Primitives;
+        using SadTutorial.UI;
+        using Console = SadConsole.Console;
+
+        namespace SadTutorial {
+            class GameLoop {
+                public const int GameWidth = 147;
+                public const int GameHeight = 50;
+                public const int MapWidth = 100;
+                public const int MapHeight = 100;
+                public const int MapConW = 60;
+                public const int MapConH = 35;
+
+                public static SadFont SquareFont; 
+                public static UIManager UIManager; 
+                public static World World;
+
+                static void Main(string[] args) { 
+                    Game.Create(GameWidth, GameHeight, "./fonts/ThinExtended.font");
+                    
+                    Game.Instance.OnStart = Init;
+                    
+                    Game.Instance.Run();
+                    Game.Instance.Dispose();
+                }
+
+                private static void Init() { SquareFont = (SadFont)GameHost.Instance.LoadFont("./fonts/CheepicusExtended.font"); 
+                    Game.Instance.MonoGameInstance.Window.Title = "SadTutorial";
+
+                    World = new();
+                    
+                    UIManager = new();
+
+
+
+                    UIManager.Init();
+                }
+            }
+        } 
+    </div>
+    <br><br>
+
+    <h1>3. Zelda2 Adjacent Map-Screens</h1>
+    <p>For those of you unfamiliar, in Zelda 2 (and to an extent in the later 2D zeldas such as Link to the Past), the maps were fixed
+    rectangles that you walked into the edges of to move to the next screen in that direction. This can be a preferable style of map for
+    people who want an extensive overworld of connected maps without the difficult-to-constrain nature of the infinite map example. Combined
+    with serializing the map files, this method can allow you to build a beautiful hand-crafted world for players to wander around in.
+    Unfortunately the price for this dream is steep - a great deal of changes to a bunch of our files to make it work.</p>
+    <h3>World.cs</h3>
+    <ul>
+        <li>Replace the CurrentMap variable in World with a Dictionary&lt;Point, Map&gt;</li>
+        <li>In our World constructor, initialize the Dictionary and add a map at Point 0,0</li>
+        <li>Also in World, add a method called GetMap that safely retrieves stored maps, or creates new maps if needed.</li>
+    </ul>
+    <div class="code_block">
+        using SadRogue.Primitives;
+        using SadTutorial.Entities; 
+
+        namespace SadTutorial {
+            public class World {
+                public Dictionary<Point, Map> MapLibrary; 
+                public Actor Player;
+
+                public World() {
+                    MapLibrary = new();
+                    MapLibrary.Add(new Point(0, 0), new Map(GameLoop.MapWidth, GameLoop.MapHeight)); 
+
+                    Player = new(Color.HotPink, Color.Black, '@');
+                    Player.Position = new Point(5, 5);
+                } 
+
+                public Map? GetMap(Point point) {
+                    if (MapLibrary.ContainsKey(point))
+                        return MapLibrary[point];
+                    return null;
+                }
+            }
+        } 
+    </div>
+
+    <h3>Map.cs</h3>
+    <ul>
+        <li>Remove the border walls, otherwise you can't actually traverse the maps.</li>
+        <li>Alter the IsTileWalkable method to return false if the Point is logically out of bounds. </li>
+    </ul>
+    <div class="code_block">
+        using SadRogue.Primitives;
+
+        namespace SadTutorial {
+            public class Map {
+                public Tile[] Tiles;
+                public int Width;
+                public int Height;
+
+                public Map(int w, int h) {
+                    Width = w;
+                    Height = h;
+                    Tiles = new Tile[Width * Height];
+
+                    for (int x = 0; x < Width; x++) {
+                        for (int y = 0; y < Height; y++) { 
+                            Tiles[new Point(x, y).ToIndex(Width)] = new Tile("Floor", false, false, Color.DarkGray, Color.Black, '.');
+                        }
+                    }
+                }
+
+
+                public Tile? TileAt(Point point) {
+                    int index = point.ToIndex(Width);
+                    if (index >= 0 && index <= Tiles.Length) {
+                        return Tiles[index];
+                    }
+                    return null;
+                }
+
+                public bool IsTileWalkable(Point point) {
+                    if (point.X < 0 || point.Y < 0 || point.X >= GameLoop.MapWidth || point.Y >= GameLoop.MapHeight)
+                        return false;
+
+
+                    int index = point.ToIndex(Width);
+                    if (index >= 0 && index <= Tiles.Length) {
+                        return !Tiles[index].blockMove;
+                    }
+                    return false;
+                }
+
+            }
+        } 
+    </div>
+
+    <h3>UI/UI_Map.cs</h3>
+    <ul>
+        <li>Remove the tile-added from the Con remake.</li>
+        <li>Add a LoadMap function to set the surface to the tiles of the map at a given set of coords</li>
+        <li>Call that function at the end of the constructor to set the tiles to the appropriate appearance.</li>
+        <li>Also that function should clear and repopulate the entityRenderer, but currently we only have the Player anyways</li>
+    </ul>
+    <div class="code_block">
+        using SadConsole;
+        using SadConsole.Entities;
+        using SadRogue.Primitives;
+
+        namespace SadTutorial.UI {
+            public class UI_Map : InstantUI {
+                public Renderer entityRenderer;
+
+
+                public UI_Map(int width, int height) : base(width, height, "Map", "") {
+                    Con = new SadConsole.Console(new CellSurface(GameLoop.MapWidth, GameLoop.MapHeight), GameLoop.SquareFont);
+
+                    Win = new(new CellSurface(width, height), GameLoop.SquareFont);
+
+                    Con.UsePixelPositioning = true;
+                    Con.Position = new Point(12, 12);
+
+                    Win.IsVisible = true;
+                    Win.UsePixelPositioning = true;
+                    Win.Position = new Point(277, 0);
+                    Win.CanDrag = false;
+                    Win.Title = "";
+
+                    entityRenderer = new();
+                    Con.SadComponents.Add(entityRenderer);
+                    entityRenderer.Add(GameLoop.World.Player);
+
+
+                    Win.Children.Add(Con);
+                    GameLoop.UIManager.Children.Add(Win);
+
+                    LoadMap(GameLoop.World.Player.MapPos);
+                }
+
+                public override void Update() {
+
+                }
+
+                public void LoadMap(Point point) {
+                    if (!GameLoop.World.MapLibrary.ContainsKey(point))
+                        GameLoop.World.MapLibrary.Add(point, new Map(GameLoop.MapWidth, GameLoop.MapHeight));
+
+                    Con.Surface = new CellSurface(GameLoop.MapWidth, GameLoop.MapHeight, GameLoop.World.MapLibrary[point].Tiles);
+                    Con.IsDirty = true;
+                    
+                    entityRenderer.RemoveAll();
+
+                    // some kind of for-loop to iterate through entity list on the new map to add them all
+
+                    entityRenderer.Add(GameLoop.World.Player);
+                }
+            }
+        } 
+    </div>
+
+    <h3>UI/UIManager.cs</h3>
+    <ul>
+        <li>Add a GetUI method to safely retrieve interfaces</li>
+        <li>Add a LoadMap function that gets the Map UI and calls LoadMap on it</li>
+    </ul>
+    <div class="code_block">
+        using SadConsole;
+        using SadConsole.UI;
+        using SadRogue.Primitives;
+        using Key = SadConsole.Input.Keys;
+
+        namespace SadTutorial.UI {
+            public class UIManager : ScreenObject {
+                public SadConsole.UI.Colors CustomColors;
+                public Dictionary<string, InstantUI> Interfaces = new();
+
+                public UIManager() {
+                    IsVisible = true;
+                    IsFocused = true;
+                    UseMouse = true;
+                    Parent = GameHost.Instance.Screen;
+                }
+
+                public override void Update(TimeSpan timeElapsed) {
+                    foreach (KeyValuePair<string, InstantUI> kv in Interfaces) {
+                        if (kv.Value.Win.IsVisible) {
+                            kv.Value.Update();
+                            kv.Value.Input();
+                        }
+                    }
+
+                    if (Helper.KeyPressed(Key.W)) { GameLoop.World.Player.TryMove(0, -1); }
+                    if (Helper.KeyPressed(Key.S)) { GameLoop.World.Player.TryMove(0, 1); }
+                    if (Helper.KeyPressed(Key.A)) { GameLoop.World.Player.TryMove(-1, 0); }
+                    if (Helper.KeyPressed(Key.D)) { GameLoop.World.Player.TryMove(1, 0); }
+
+
+                    Helper.ClearKeys();
+                    base.Update(timeElapsed);
+                }
+
+                public void Init() {
+                    SetupCustomColors();
+
+                    UI_Sidebar Sidebar = new(40, 50);
+                    UI_Map Map = new(GameLoop.MapWidth + 2, GameLoop.MapHeight + 2);
+                }
+
+                public InstantUI? GetUI(string key) {
+                    if (Interfaces.ContainsKey(key))
+                        return Interfaces[key];
+                    return null;
+                }
+
+                public void LoadMap() {
+                    InstantUI? UI = GetUI("Map");
+                    if (UI != null && UI is UI_Map map) {
+                        map.LoadMap(GameLoop.World.Player.MapPos); 
+                    }
+                }
+
+                private void SetupCustomColors() {
+                    CustomColors = SadConsole.UI.Colors.CreateAnsi();
+                    CustomColors.ControlHostBackground = new AdjustableColor(Color.Black, "Black");
+                    CustomColors.Lines = new AdjustableColor(Color.White, "White");
+                    CustomColors.Title = new AdjustableColor(Color.White, "White");
+
+                    CustomColors.RebuildAppearances();
+                    SadConsole.UI.Themes.Library.Default.Colors = CustomColors;
+                }
+            }
+        } 
+    </div>
+
+    <h3>Entities/Actor.cs</h3>
+    <ul>
+        <li>Add a Point called MapPos, to store their overworld map position</li>
+        <li>Change the movement code to see if they're trying to move off the edge of the map, and react accordingly</li>
+        <li>If they <em>are</em> moving off the map and it's the player, send off the request to load the new map.</li>
+    </ul>
+    <div class="code_block">
+        using SadConsole.Entities;
+        using SadRogue.Primitives;
+
+        namespace SadTutorial.Entities {
+            public class Actor : Entity {
+                public Point MapPos;
+
+                public Actor(Color fore, Color back, int glyph) : base(fore, back, glyph, 0) {
+                    MapPos = new Point(0, 0);
+                }
+
+                public void TryMove(int dx, int dy) {
+                    Point newPos = Position + new Point(dx, dy);
+
+                    Map? map = GameLoop.World.GetMap(MapPos);
+                    if (map != null) {
+                        if (map.IsTileWalkable(newPos)) {
+                            Position += new Point(dx, dy);
+                        } else if (newPos.X < 0) { // Moved left off map
+                            Position = new Point(GameLoop.MapWidth - 1, Position.Y);
+                            MapPos += new Point(-1, 0);
+                        } else if (newPos.X >= GameLoop.MapWidth) { // Moved right off map
+                            Position = new Point(0, Position.Y);
+                            MapPos += new Point(1, 0);
+                        } else if (newPos.Y < 0) { // Moved up off map
+                            Position = new Point(Position.X, GameLoop.MapHeight - 1);
+                            MapPos += new Point(0, -1);
+                        } else if (newPos.Y >= GameLoop.MapHeight) { // Moved down off map
+                            Position = new Point(Position.X, 0);
+                            MapPos += new Point(0, 1);
+                        }
+                    }
+
+                    // If we moved to a new map and it's the player we're checking
+                    if (Position != newPos && this == GameLoop.World.Player) {
+                        GameLoop.UIManager.LoadMap();
+                    }
+                }
+            }
+        } 
+    </div>
+
+    <p>Finally, if you want, you can add a readout on the Sidebar that shows GameLoop.World.Player.MapPos as a string, so you can
+        see (beyond the player jumping to the other side of the screen) that you are actually moving from map to map.</p>
+    <img src="../resources/img/02alt - Zelda2 Map.gif" alt="">
+
+    <p>Huge long chapter for things that the average person may not even need or want to use, but I wanted to present the concepts
+        just in case. Again the future chapters will generally assume you followed the default Chapter 2, so adjusting future code
+        to fit these maps will be left largely up to you unless I feel that it's obtuse enough to merit special mention.
+    </p>
+
+    <p> 
+    <a href="./03.html">Chapter 03: Map Generation</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>
