@@ -68,8 +68,8 @@
     <p>And the other file we have to change is our UI_Map, where we have to draw the tiles immediately surrounding our player and the
     player object iself. We can remove the reference to GameLoop.World.CurrentMap.Tiles when recreating the surface (though we still
     need to recreate the surface to use the new font). We can also remove the entityRenderer and all references to it - it doesn't work
-    when we're playing with relative positions, as far as I'm aware. In our Update method we want to Clear the console and print the area
-    around the player, with the player always in the center. Your code should look something like this: </p>
+    when we're playing with relative positions, as far as I'm aware. In a new UpdateVisibleArea method we want to Clear the console and
+    print the area around the player, with the player always in the center. Your code should look something like this: </p>
     <div class="code_block">
         using SadConsole;
         using SadConsole.Entities;
@@ -94,20 +94,28 @@
 
                     Win.Children.Add(Con);
                     GameLoop.UIManager.Children.Add(Win);
+
+                    UpdateVisibleArea();
+
+                    GameLoop.World.Player.PositionChanged += PlayerPosChanged;
                 }
 
-                public override void Update() {
+                private void PlayerPosChanged(object? sender, ValueChangedEventArgs&lt;Point&gt; e) {
+                    UpdateVisibleArea();
+                }
+
+                public void UpdateVisibleArea() {
                     Con.Clear();
 
                     Point pos = GameLoop.World.Player.Position;
-                    
+
 
                     int leftX = pos.X - (GameLoop.MapWidth / 2);
                     int topY = pos.Y - (GameLoop.MapHeight / 2);
 
                     Con.ViewPosition = new Point(leftX, topY);
 
-                    for (int x = leftX; x < leftX + GameLoop.MapWidth; x++) { 
+                    for (int x = leftX; x < leftX + GameLoop.MapWidth; x++) {
                         for (int y = topY; y < topY + GameLoop.MapHeight; y++) {
                             Con.Print(x - leftX, y - topY, new ColoredString(GameLoop.World.CurrentMap.TileAt(new Point(x, y))));
                         }
@@ -115,13 +123,15 @@
 
                     Con.Print(GameLoop.MapWidth / 2, GameLoop.MapHeight / 2, new ColoredString(GameLoop.World.Player.Appearance));
                 }
+
+                public override void Update() { } 
             }
         } 
     </div>
 
-    <p>With the changes two these two files you should be largely done! You can save on the amount of computing done by
-    only calling the tile redraw only any time the player moves (unless you have the map changing without their input somehow), 
-    but it's not strictly necessary. Anyways here's a gif of it working and let's move on to the other map types.</p>
+    <p>With the changes two these two files you should be largely done! Something interesting we're doing here is hooking a call to UpdateVisibleArea()
+    into the Player.PositionChanged event, so we only have to update the visible area when the player actually moves to a new position. Here's a 
+    gif of it working, let's move on to the other map types.</p>
     <img src="../resources/img/02alt - Infinite Map.gif" alt="">
 
     <h1>2. Scrolling Finite Map</h1>
