@@ -1,11 +1,12 @@
 ﻿using SadConsole;
 using SadConsole.UI;
-using SadRogue.Primitives; 
+using SadRogue.Primitives;
+using System; 
 
 namespace SadTutorial.UI {
     public class UIManager : ScreenObject {
         public SadConsole.UI.Colors CustomColors;
-        public Dictionary<string, InstantUI> Interfaces = new();
+        public UI_GameArea GameArea;
 
         public UIManager() {
             IsVisible = true;
@@ -15,11 +16,9 @@ namespace SadTutorial.UI {
         }
 
         public override void Update(TimeSpan timeElapsed) {
-            foreach(KeyValuePair<string, InstantUI> kv in Interfaces) {
-                if (kv.Value.Win.IsVisible) {
-                    kv.Value.Update();
-                    kv.Value.Input();
-                }
+            if (GameArea.Win.IsVisible) {
+                GameArea.Update();
+                GameArea.Input();
             }
 
 
@@ -28,9 +27,8 @@ namespace SadTutorial.UI {
         }
 
         public void Init() {
-            SetupCustomColors();
-
-            UI_Sidebar Sidebar = new(40, 50);
+            SetupCustomColors(); 
+            GameArea = new(GameLoop.GameWidth, GameLoop.GameHeight);
         }
 
 

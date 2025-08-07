@@ -1,6 +1,8 @@
 ﻿using SadConsole;
 using SadConsole.Input;
 using SadRogue.Primitives;
+using System;
+using System.Collections.Generic;
 
 namespace SadTutorial {
     public static class Helper { 
@@ -42,7 +44,7 @@ namespace SadTutorial {
             if (GameHost.Instance.Keyboard.IsKeyDown(Keys.LeftControl) || GameHost.Instance.Keyboard.IsKeyDown(Keys.RightControl))
                 return true;
             return false;
-        }
+        }  
 
         public static ColoredString GetDarker(this ColoredString instance) {
 
@@ -70,6 +72,26 @@ namespace SadTutorial {
             if (GameHost.Instance.Mouse.LeftClicked) {
                 if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
                     OnClick(ID);
+                }
+            }
+        }
+
+        public static void PrintClickable(this SadConsole.Console instance, int x, int y, string str, Action OnClick) {
+            instance.PrintClickable(x, y, new ColoredString(str), OnClick);
+        }
+
+        public static void PrintClickable(this SadConsole.Console instance, int x, int y, ColoredString str, Action OnClick) {
+            Point mousePos = new MouseScreenObjectState(instance, GameHost.Instance.Mouse).CellPosition;
+
+            if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
+                instance.Print(x, y, str.GetDarker());
+            } else {
+                instance.Print(x, y, str);
+            }
+
+            if (GameHost.Instance.Mouse.LeftClicked) {
+                if (mousePos.X >= x && mousePos.X <= x + str.Length && mousePos.Y == y) {
+                    OnClick();
                 }
             }
         }

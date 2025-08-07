@@ -35,8 +35,7 @@ namespace SadTutorial {
             // Initialize our UIManager
             UIManager = new();
 
-
-
+            // Initialize the interfaces within UIManager, plus anything else we need to set up.
             UIManager.Init();
         }
     }
