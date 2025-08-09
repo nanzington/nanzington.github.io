@@ -4,33 +4,33 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SadTutorial Core 01a - Networking</title>
+    <title>SadTutorial Core 01n - Networking</title>
     <link rel="stylesheet" href="../style.css">
     <link rel="stylesheet" href="../simple.css">
 </head>
 <body>
     <h1>0. Chapter Goals</h1>
-    <p>"Networking?!" you may ask? Networking! There's not that many tutorials out there on how to handle networking in a relatively simple way for games. The library we'll be using is message-based and asynchronous, which is how Valve's Steamworks API works as well, so a lot of these concept should translate if you are making a game for release on Steam. I'll cover the differences at the end of the chapter. The pattern we're going for results in a game where the client program can host a server freely, allowing others to connect. This is a little inconvenient if you want a more MMO style thing, but with a little elbow grease should work for a decent number of simultaneous players. </p>
+    <p>"Networking?!" you may ask? Networking! There's not that many tutorials out there on how to handle networking in a relatively simple way for games. The library we'll be using is message-based and asynchronous, which is how Valve's Steamworks API works as well, so a lot of these concept should translate if you are making a game for release on Steam. The pattern we're going for results in a game where the client program can host a server freely, allowing others to connect. This is a little inconvenient if you want a more MMO style thing, but with a little elbow grease it should work for a decent number of simultaneous players. </p>
  
     <h1>1. Telepathy</h1>
     <p>No, not the superpower, it's the networking library we'll be using. Grab the Telepathy.dll from the resources folder of this tutorial, where you were hopefully able to also get the fonts.zip, and put it in the root of your project. On the right sidebar right click Dependencies and add a project dependency, then navigate to your project folder and select Telepathy.dll. This should properly link up things so that you can reference it via code, which we'll be doing extensively in <b>NetworkManager.cs</b> in a moment. </p>
 
     <h1>2a. Preparations - UI_GameArea</h1>
-    <p> Before we get to that, go to <b>UI_GameArea</b> and add two new variables: <b>public List<string> MessageLog;</b> and <b>public bool NetSwitch = false;</b>, then add the following code at the bottom of the Update method.</p>
+    <p> Before we get to that, go to <b>UI_GameArea</b> and add two new variables: <b>public List<string> MessageLog = new();</b> and <b>public bool NetSwitch = false;</b>, then add the following code at the bottom of the Update method.</p>
 
     <div class="code_block">
-    Con.PrintClickable(0, 8, "Network Switch: " + NetSwitch.ToString(), () => {
+    Con.PrintClickable(0, 11, "Network Switch: " + NetSwitch.ToString(), () => {
         NetSwitch = !NetSwitch;
         NetMsg msg = new("SetBool", -1);
         msg.MiscBool = NetSwitch;
 
-        GameLoop.SendMessageIfNecessary(msg, -1);
+        GameSettings.SendMessageIfNecessary(msg, -1);
     }); 
 
-    if (!GameLoop.NetworkManager.IsServerRunning() && !GameLoop.NetworkManager.IsClientConnected()) {
-        Con.PrintClickable(50, 0, "Start Server", () => { GameLoop.NetworkManager.StartServer(); });
+    if (!GameSettings.NetworkManager.IsServerRunning() && !GameSettings.NetworkManager.IsClientConnected()) {
+        Con.PrintClickable(50, 0, "Start Server", () => { GameSettings.NetworkManager.StartServer(); });
          
-        Con.PrintClickable(65, 0, "Join Local Server", () => { GameLoop.NetworkManager.JoinServer("localhost", 25565); });
+        Con.PrintClickable(65, 0, "Join Local Server", () => { GameSettings.NetworkManager.JoinServer("localhost", 25565); });
     }
 
     for (int i = 0; i < 20 && i < MessageLog.Count; i++) {
@@ -41,8 +41,8 @@
     <p> These are fairly simple tools for connecting and testing the connection. The first PrintClickable "line" toggles our new switch, then constructs a message with a new type we'll be making and sends it with a method we'll get to it in a moment. The next two PrintClickables are only shown if there's no connection or server already, and the for-loop simply displays the first 20 messages held in our log.</p>
 
 
-    <h1>2b. Preparations - GameLoop</h1>
-    <p> Next let's move to <b>GameLoop.cs</b> for some moderate changes. Add a new variable, <b>public static NetworkManager NetworkManager;</b>. Right below <b>Game.Instance.OnStart = Init;</b> add <b>Game.Instance.FrameUpdate += Update;</b>, then our final change to this file is adding the following functions.
+    <h1>2b. Preparations - GameSettings</h1>
+    <p> Next let's move to <b>GameSettings.cs</b> for some moderate changes. Add a new variable, <b>public static NetworkManager NetworkManager;</b>. Over in <b>Program.cs</b> real quick add <b>GameSettings.NetworkManager = new NetworkManager();</b> underneath the UIManager creation and in our empty Update function add <b>GameSettings.NetworkManager.Update();</b>, then back in <b>GameSettings.cs</b> the final change to this file is adding the following functions.
 
     <div class="code_block">
     private static void Update(object sender, GameHost e) {
@@ -60,45 +60,9 @@
         }
     }
     </div> 
-    <p> First function is pretty self explanatory, just call the NetworkManager Update every frame. The second function, SendMessageIfNecessary, will check to see if a server is being run and if so pass the NetMsg along to the ServerSend function over in NetworkManager, or if a client is connected it sends it to the ClientSend function instead.</p>
-
-    <h1>2c. Preparations - Helper</h1>
-    <p>We just need to add two new small functions here anywhere you like, though I placed them at the end of the file after all the other functions. The first takes any serializable object, converts it into json, then serializes the json text into a byte array and returns it. The second takes a byte array that we assure it is the provided type (T) and converts it back into json and then deserializes that back into our object, hopefully error free! To try to avoid memory bloat if we're sending a lot of messages in a single frame, the MemoryStream, StreamReader, and StreamWriters are placed outside the functions to be reused instead of creating a new set every time. 
-    <div class="code_block">
-    static MemoryStream stream;
-    static StreamReader reader;
-    static StreamWriter writer;
-    public static byte[] ToByteArray(this object instance, JsonSerializerSettings settings = null) {
-        stream = new();
-        using (writer = new StreamWriter(stream)) {
-            var serializer = JsonSerializer.CreateDefault(settings);
-            serializer.Serialize(writer, instance);
-            writer.Close();
-            stream.Close();
-        }
-
-        return stream.ToArray();
-    }
-
-    public static T FromByteArray<T>(this byte[] input, JsonSerializerSettings settings = null) {
-        stream = new(input);
-        T output;
-
-        using (reader = new StreamReader(stream)) {
-            using (var jsonReader = new JsonTextReader(reader)) {
-                var serializer = JsonSerializer.CreateDefault(settings);
-
-                output = serializer.Deserialize<T>(jsonReader);
-                stream.Close();
-                reader.Close();
-            }
-        }
-
-        return output;
-    }
-    </div>
-
-    <h1>2d. Preparations - NetMsg</h1>
+    <p> Our additions to <b>Program.cs</b> will initialize the Network Manager and call its update every frame, while <b>SendMessageIfNecessary</b> will handle routing our network messages to the server or clients as necessary.</p>
+ 
+    <h1>2c. Preparations - NetMsg</h1>
     <p> Create a folder in your project root called Data, then a file inside it called <b>NetMsg.cs</b> with the following code:
     <div class="code_block">
     namespace SadTutorial.Data {
@@ -142,11 +106,11 @@
 
                 client = new Client(4096);
                 client.OnConnected = () => {
-                    GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Connected to server.");
+                    GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Connected to server.");
                 };
 
                 client.OnDisconnected = () => {
-                    GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Disconnected from server.");
+                    GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Disconnected from server.");
                 };
 
                 client.OnData = ClientOnData;
@@ -154,7 +118,7 @@
         }
     }
     </div>
-    <p> Nothing too fancy so far. We create the server and client variables, initialize them with a max message size fo 4096 bytes, and add a function call to each of the events we need to handle. For the client they just need a confirmation of their actions, so we use a simple lambda in each with a call to log the message back in UI_GameArea. All of the 13 functions we'll be adding will be provided, then explained in the block following it. All of them are to be placed in the NetworkManager class beside the constructor, in any order you choose.</p>
+    <p> Nothing too fancy so far. We create the server and client variables, initialize them with a max message size of 4096 bytes, and add a function call to each of the events we need to handle. For the client they just need a confirmation of their actions, so we use a simple lambda in each with a call to log the message back in UI_GameArea. All of the 13 functions we'll be adding will be provided, then explained in the block following it. All of them are to be placed in the NetworkManager class beside the constructor, in any order you choose.</p>
     
     <hr>
     <div class="code_block">
@@ -202,7 +166,7 @@
     <div class="code_block">
     public void StartServer() {
         server.Start(25565);
-        GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Server started on port 25565.");
+        GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Server started on port 25565.");
     }
     </div>
     <p>Here we have the function for starting up a server, currently set to open it on port 25565. Feel free to change this if you like, just remember to change the JoinServer call accordingly. We also log a message to let the player know that the server has been started, and on what port. With a little effort you could allow hosts to set their own port, and let clients specify what port they want to connect on. For now that's outside the scope of the tutorial, so we'll move on.</p>
@@ -211,7 +175,7 @@
     <div class="code_block">
     public void StopServer() {
         server.Stop();
-        GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Server stopped.");
+        GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Server stopped.");
     }
     </div>
     <p>The opposite of the previous function, disconnects all clients and closes the server listener. Again we log the outcome to keep the host informed.</p>
@@ -239,7 +203,7 @@
     <hr>
     <div class="code_block">
     public void OnConnected(int connectionId, string test) {
-        GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " connected.");
+        GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " connected.");
     }
     </div>
     <p>This function is what we plugged into the Server.OnConnected event in the constructor, and for now all it does it log that a client has connected.</p>
@@ -247,7 +211,7 @@
     <hr>
     <div class="code_block">
     public void OnDisconnected(int connectionId) { 
-        GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " disconnected.");
+        GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " disconnected.");
     }
     </div>
     <p>And the opposite side of the coin, our Server.OnDisconnected event, which is run whenever a client disconnects and logs that they did so.</p>
@@ -274,8 +238,8 @@
         NetMsg msg = data.Array.FromByteArray<NetMsg>();
 
         if (msg.Message == "SetBool") {
-            GameLoop.UIManager.GameArea.NetSwitch = msg.MiscBool;
-            GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " set the switch to " + msg.MiscBool.ToString() + ".");
+            GameSettings.UIManager.GameArea.NetSwitch = msg.MiscBool;
+            GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " set the switch to " + msg.MiscBool.ToString() + ".");
         }
     }
     </div>
@@ -286,59 +250,53 @@
 
     <p>Assuming you made it this far and everything is working, you've now got a decent base to build up a multiplayer game with! You can easily expand NetMsg to send additional types of data along (anything that can be serialized and deserialized), and you can use our message identifier system to act on messages as they come in. Future tutorial chapters will assume that you did <em>not</em> do all this, but supplementary chapters will be included alongside each one to show the changes necessary to make everything work in multiplayer as well.</p>
     
-    <button type="button" class="collapsible"><b>Complete</b> GameLoop.cs</button>
+    <button type="button" class="collapsible"><b>Complete</b> Program.cs</button>
     <div class="hidden_block">
-    using SadConsole;
-    using SadRogue.Primitives;
+    using SadConsole.Configuration;
+    using SadTutorial.UI;
+    using SadTutorial;
+
+    Settings.WindowTitle = "SadTutorial";
+
+    Builder startup = new Builder()
+        .SetScreenSize(GameSettings.GameWidth, GameSettings.GameHeight)
+        .SetStartingScreen((host) => {
+            GameSettings.SquareFont = Game.Instance.Fonts["CheepicusExtended"];
+            GameSettings.UIManager = new UIManager();
+            GameSettings.NetworkManager = new NetworkManager();
+
+            GameSettings.UIManager.Init();
+
+            return GameSettings.UIManager;
+        })
+        .IsStartingScreenFocused(true)
+        .ConfigureFonts("./fonts/ThinExtended.font", new[] { "./fonts/CheepicusExtended.font" })
+        .AddFrameUpdateEvent(GameHost_FrameUpdate)
+        ;
+
+    Game.Create(startup);
+    Game.Instance.Run();
+    Game.Instance.Dispose();
+
+    static void GameHost_FrameUpdate(object sender, GameHost e) {
+        GameSettings.NetworkManager.Update();
+    }
+    </div>
+
+    <button type="button" class="collapsible"><b>Complete</b> GameSettings.cs</button>
+    <div class="hidden_block">
     using SadTutorial.Data;
     using SadTutorial.UI;
-    using System;
-    using Console = SadConsole.Console;
 
     namespace SadTutorial {
-        class GameLoop {
+        public static class GameSettings {
             public const int GameWidth = 160;
             public const int GameHeight = 50;
-            public const int MapWidth = 70;
-            public const int MapHeight = 43;
 
-            public static SadFont SquareFont;
+            public static IFont SquareFont;
 
             public static UIManager UIManager;
             public static NetworkManager NetworkManager;
-
-            static void Main(string[] args) {
-                // Setup the engine and create the main window. 
-                Game.Create(GameWidth, GameHeight, "./fonts/ThinExtended.font");
-
-                // Hook the start event so we can add consoles to the system.
-                Game.Instance.OnStart = Init;
-
-                Game.Instance.FrameUpdate += Update;
-
-                // Start the game.
-                Game.Instance.Run();
-                Game.Instance.Dispose();
-            }
-            
-            private static void Init() {
-                // Load up our square font (CheepicusExtended) and save it for later - our game map will use it, while the rest defaults to our thin font.
-                SquareFont = (SadFont)GameHost.Instance.LoadFont("./fonts/CheepicusExtended.font");
-                // Set the window title to whatever you like, probably the name of your project.
-                Game.Instance.MonoGameInstance.Window.Title = "SadTutorial";
-
-                // Initialize our UIManager
-                UIManager = new();
-
-                // Initialize the interfaces within UIManager, plus anything else we need to set up.
-                UIManager.Init();
-
-                NetworkManager = new();
-            }
-
-            private static void Update(object sender, GameHost e) {
-                NetworkManager.Update();
-            }
 
             public static void SendMessageIfNecessary(NetMsg msg, int recipient) {
                 if (NetworkManager.IsServerRunning()) {
@@ -351,16 +309,14 @@
                 }
             }
         }
-    } 
+    }
     </div>
 
     <button type="button" class="collapsible"><b>Complete</b> UI_GameArea.cs</button>
     <div class="hidden_block">
-    using SadConsole;
+    using SadAdditions; 
     using SadConsole.Input;
-    using SadRogue.Primitives;
     using SadTutorial.Data;
-    using System.Collections.Generic;
 
     namespace SadTutorial.UI {
         public class UI_GameArea : InstantUI {
@@ -368,8 +324,8 @@
             bool switch1 = false;
             bool switch2 = false;
             bool clickSwitch = false;
+            public bool NetSwitch = false;
 
-            public bool NetSwitch = false; 
             public List<string> MessageLog = new();
 
             public UI_GameArea(int width, int height) : base(width, height, "") {
@@ -379,202 +335,64 @@
             }
 
             public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
                 Con.Clear();
                 SquareCon.Clear();
                 DoubleSquareCon.Clear();
 
-                Con.Print(0, 0, "Hello World!");  
-                SquareCon.Print(0, 1, "Hello World!");  
+                Con.Print(0, 0, "Hello World!");
+                SquareCon.Print(0, 1, "Hello World!");
+                DoubleSquareCon.Print(0, 1, "Hello World!");
 
-                if (Helper.KeyPressed(Keys.Space)) {
+                if (Shorthands.KeyPressed(Keys.Space)) {
                     switch1 = !switch1;
                 }
 
-                if (Helper.HotkeyDown(Keys.Space)) {
+                if (Miscellania.HotkeyDown(Keys.Space)) {
                     switch2 = !switch2;
                 }
 
-                Con.Print(0, 4, "Switch 1 (Spacebar): " + switch1.ToString());
-                Con.Print(0, 5, "Switch 2 (Space hotkey): " + switch2.ToString());
-                Con.PrintClickable(0, 6, "Click Switch: " + clickSwitch.ToString() + " [" + counter + " clicks]", UI_Clicks, "clickedSwitch");
-                Con.PrintClickable(0, 7, "Lambda Click: " + clickSwitch.ToString() + " [" + counter + " clicks]", () => {
+                Con.Print(0, 5, "Switch 1 (Spacebar): " + switch1.ToString());
+                Con.Print(0, 6, "Switch 2 (Space hotkey): " + switch2.ToString()); 
+                Con.PrintClickable(0, 8, "Lambda Click: " + clickSwitch.ToString() + " [" + counter + " clicks]", () => {
                     clickSwitch = !clickSwitch;
                     counter++;
                 });
 
-                Con.PrintClickable(0, 8, "Network Switch: " + NetSwitch.ToString(), () => {
+                Con.PrintClickable(0, 9, "Non-lambda Click: " + clickSwitch.ToString() + " [" + counter + " clicks]", ButtonClick);
+
+                Con.PrintClickable(0, 11, "Network Switch: " + NetSwitch.ToString(), () => {
                     NetSwitch = !NetSwitch;
                     NetMsg msg = new("SetBool", -1);
                     msg.MiscBool = NetSwitch;
 
-                    GameLoop.SendMessageIfNecessary(msg, -1);
-                }); 
+                    GameSettings.SendMessageIfNecessary(msg, -1);
+                });
 
-                if (!GameLoop.NetworkManager.IsServerRunning() && !GameLoop.NetworkManager.IsClientConnected()) {
-                    Con.PrintClickable(50, 0, "Start Server", () => { GameLoop.NetworkManager.StartServer(); });
-                     
-                    Con.PrintClickable(65, 0, "Join Local Server", () => { GameLoop.NetworkManager.JoinServer("localhost", 25565); });
+                if (!GameSettings.NetworkManager.IsServerRunning() && !GameSettings.NetworkManager.IsClientConnected()) {
+                    Con.PrintClickable(50, 0, "Start Server", () => { GameSettings.NetworkManager.StartServer(); });
+
+                    Con.PrintClickable(65, 0, "Join Local Server", () => { GameSettings.NetworkManager.JoinServer("localhost", 25565); });
                 }
 
                 for (int i = 0; i < 20 && i < MessageLog.Count; i++) {
                     Con.Print(50, i, MessageLog[i]);
                 }
-
-
-                
             }
 
             public override void Input() {
-                
-            }
 
-            public override void UI_Clicks(string ID) { 
-                if (ID == "clickedSwitch") {
-                    clickSwitch = !clickSwitch;
-                    counter++;
-                }
+            } 
+
+            public void ButtonClick() {
+                clickSwitch = !clickSwitch;
+                counter++;
             }
         }
     } 
-    </div>
-
-    <button type="button" class="collapsible"><b>Complete</b> Helper.cs</button>
-    <div class="hidden_block">
-    using Newtonsoft.Json;
-    using SadConsole;
-    using SadConsole.Input;
-    using SadRogue.Primitives;
-    using System;
-    using System.Collections.Generic;
-    using System.IO;
-
-    namespace SadTutorial {
-        public static class Helper { 
-            public static bool KeyPressed(Keys key) {
-                return GameHost.Instance.Keyboard.IsKeyPressed(key);
-            }
-
-            static HashSet<Keys> TriggeredHotkeys = new();
-            static HashSet<Keys> SecondaryList = new();
-            public static bool HotkeyDown(Keys key) {
-                if (!TriggeredHotkeys.Contains(key) && GameHost.Instance.Keyboard.IsKeyPressed(key)) {
-                    TriggeredHotkeys.Add(key);
-                    return true;
-                }
-
-                return false;
-            }
-
-            public static void ClearKeys() {
-                SecondaryList.Clear();
-                foreach (Keys key in TriggeredHotkeys) {
-                    if (GameHost.Instance.Keyboard.IsKeyDown(key)) {
-                        SecondaryList.Add(key);
-                    }
-                }
-                TriggeredHotkeys.Clear();
-
-                foreach (Keys key in SecondaryList) {
-                    TriggeredHotkeys.Add(key);
-                }
-            }
-
-            public static bool EitherShift() {
-                if (GameHost.Instance.Keyboard.IsKeyDown(Keys.LeftShift) || GameHost.Instance.Keyboard.IsKeyDown(Keys.RightShift))
-                    return true;
-                return false;
-            }
-            public static bool EitherControl() {
-                if (GameHost.Instance.Keyboard.IsKeyDown(Keys.LeftControl) || GameHost.Instance.Keyboard.IsKeyDown(Keys.RightControl))
-                    return true;
-                return false;
-            }  
-
-            public static ColoredString GetDarker(this ColoredString instance) {
-
-                for (int i = 0; i < instance.Length; i++) {
-                    instance[i].Foreground = instance[i].Foreground.GetDarker();
-                }
-
-                return instance;
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, string str, Action<string> OnClick, string ID) {
-                instance.PrintClickable(x, y, new ColoredString(str), OnClick, ID);
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, ColoredString str, Action<string> OnClick, string ID) {
-                Point mousePos = new MouseScreenObjectState(instance, GameHost.Instance.Mouse).CellPosition;
-
-                if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                    instance.Print(x, y, str.GetDarker());
-                }
-                else {
-                    instance.Print(x, y, str);
-                }
-
-                if (GameHost.Instance.Mouse.LeftClicked) {
-                    if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                        OnClick(ID);
-                    }
-                }
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, string str, Action OnClick) {
-                instance.PrintClickable(x, y, new ColoredString(str), OnClick);
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, ColoredString str, Action OnClick) {
-                Point mousePos = new MouseScreenObjectState(instance, GameHost.Instance.Mouse).CellPosition;
-
-                if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                    instance.Print(x, y, str.GetDarker());
-                } else {
-                    instance.Print(x, y, str);
-                }
-
-                if (GameHost.Instance.Mouse.LeftClicked) {
-                    if (mousePos.X >= x && mousePos.X <= x + str.Length && mousePos.Y == y) {
-                        OnClick();
-                    }
-                }
-            }
-
-
-            static MemoryStream stream;
-            static StreamReader reader;
-            static StreamWriter writer;
-            public static byte[] ToByteArray(this object instance, JsonSerializerSettings settings = null) {
-                stream = new();
-                using (writer = new StreamWriter(stream)) {
-                    var serializer = JsonSerializer.CreateDefault(settings);
-                    serializer.Serialize(writer, instance);
-                    writer.Close();
-                    stream.Close();
-                }
-
-                return stream.ToArray();
-            }
-
-            public static T FromByteArray<T>(this byte[] input, JsonSerializerSettings settings = null) {
-                stream = new(input);
-                T output;
-
-                using (reader = new StreamReader(stream)) {
-                    using (var jsonReader = new JsonTextReader(reader)) {
-                        var serializer = JsonSerializer.CreateDefault(settings);
-
-                        output = serializer.Deserialize<T>(jsonReader);
-                        stream.Close();
-                        reader.Close();
-                    }
-                }
-
-                return output;
-            }
-        }
-    } 
-    </div>
+    </div> 
 
     <button type="button" class="collapsible"><b>Complete</b> NetMsg.cs</button>
     <div class="hidden_block">
@@ -598,9 +416,10 @@
 
     <button type="button" class="collapsible"><b>Complete</b> NetworkManager.cs</button>
     <div class="hidden_block">
+    using SadAdditions;
     using SadTutorial.Data;
-    using System; 
-    using Telepathy; 
+    using System;
+    using Telepathy;
 
     namespace SadTutorial {
         public class NetworkManager {
@@ -616,11 +435,11 @@
 
                 client = new Client(4096);
                 client.OnConnected = () => {
-                    GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Connected to server.");
+                    GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Connected to server.");
                 };
 
                 client.OnDisconnected = () => {
-                    GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Disconnected from server.");
+                    GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Disconnected from server.");
                 };
 
                 client.OnData = ClientOnData;
@@ -639,9 +458,10 @@
 
             // SERVER: Either broadcast a message to all clients or send a message to a specific client as requested.
             public void ServerSend(NetMsg msg, int toId = -1) {
-                if (toId == -1) { 
+                if (toId == -1) {
                     server.Broadcast(msg.ToByteArray());
-                } else {
+                }
+                else {
                     server.Send(toId, msg.ToByteArray());
                 }
             }
@@ -661,13 +481,13 @@
             // SERVER: Start the server listener
             public void StartServer() {
                 server.Start(25565);
-                GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Server started.");
+                GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Server started.");
             }
 
             // SERVER: Disconnect all clients and stop the server.
             public void StopServer() {
                 server.Stop();
-                GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Server stopped.");
+                GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Server stopped.");
             }
 
             // SERVER: Returns true if hosting a server currently
@@ -686,12 +506,12 @@
 
             // SERVER: What to do when a client connects, for now simply log it.
             public void OnConnected(int connectionId, string test) {
-                GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " connected.");
+                GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " connected.");
             }
 
             // SERVER: What to do when a client disconnects, for now simply log it.
-            public void OnDisconnected(int connectionId) { 
-                GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " disconnected.");
+            public void OnDisconnected(int connectionId) {
+                GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " disconnected.");
             }
 
             // CLIENT: Receive the data, pass it to the main processor with our special ID for the server (-1)
@@ -705,8 +525,8 @@
                 NetMsg msg = data.Array.FromByteArray<NetMsg>();
 
                 if (msg.Message == "SetBool") {
-                    GameLoop.UIManager.GameArea.NetSwitch = msg.MiscBool;
-                    GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " set the switch to " + msg.MiscBool.ToString() + ".");
+                    GameSettings.UIManager.GameArea.NetSwitch = msg.MiscBool;
+                    GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " set the switch to " + msg.MiscBool.ToString() + ".");
                 }
             }
 
@@ -715,7 +535,7 @@
                 client.Disconnect();
             }
         }
-    } 
+    }
     </div>
 
     <p>

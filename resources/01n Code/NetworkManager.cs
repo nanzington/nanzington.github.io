@@ -1,6 +1,7 @@
-﻿using SadTutorial.Data;
-using System; 
-using Telepathy; 
+﻿using SadAdditions;
+using SadTutorial.Data;
+using System;
+using Telepathy;
 
 namespace SadTutorial {
     public class NetworkManager {
@@ -16,11 +17,11 @@ namespace SadTutorial {
 
             client = new Client(4096);
             client.OnConnected = () => {
-                GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Connected to server.");
+                GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Connected to server.");
             };
 
             client.OnDisconnected = () => {
-                GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Disconnected from server.");
+                GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Disconnected from server.");
             };
 
             client.OnData = ClientOnData;
@@ -39,9 +40,10 @@ namespace SadTutorial {
 
         // SERVER: Either broadcast a message to all clients or send a message to a specific client as requested.
         public void ServerSend(NetMsg msg, int toId = -1) {
-            if (toId == -1) { 
+            if (toId == -1) {
                 server.Broadcast(msg.ToByteArray());
-            } else {
+            }
+            else {
                 server.Send(toId, msg.ToByteArray());
             }
         }
@@ -61,13 +63,13 @@ namespace SadTutorial {
         // SERVER: Start the server listener
         public void StartServer() {
             server.Start(25565);
-            GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Server started.");
+            GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Server started.");
         }
 
         // SERVER: Disconnect all clients and stop the server.
         public void StopServer() {
             server.Stop();
-            GameLoop.UIManager.GameArea.MessageLog.Insert(0, "Server stopped.");
+            GameSettings.UIManager.GameArea.MessageLog.Insert(0, "Server stopped.");
         }
 
         // SERVER: Returns true if hosting a server currently
@@ -86,12 +88,12 @@ namespace SadTutorial {
 
         // SERVER: What to do when a client connects, for now simply log it.
         public void OnConnected(int connectionId, string test) {
-            GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " connected.");
+            GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " connected.");
         }
 
         // SERVER: What to do when a client disconnects, for now simply log it.
-        public void OnDisconnected(int connectionId) { 
-            GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " disconnected.");
+        public void OnDisconnected(int connectionId) {
+            GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " disconnected.");
         }
 
         // CLIENT: Receive the data, pass it to the main processor with our special ID for the server (-1)
@@ -105,8 +107,8 @@ namespace SadTutorial {
             NetMsg msg = data.Array.FromByteArray<NetMsg>();
 
             if (msg.Message == "SetBool") {
-                GameLoop.UIManager.GameArea.NetSwitch = msg.MiscBool;
-                GameLoop.UIManager.GameArea.MessageLog.Insert(0, connectionId + " set the switch to " + msg.MiscBool.ToString() + ".");
+                GameSettings.UIManager.GameArea.NetSwitch = msg.MiscBool;
+                GameSettings.UIManager.GameArea.MessageLog.Insert(0, connectionId + " set the switch to " + msg.MiscBool.ToString() + ".");
             }
         }
 

@@ -9,28 +9,73 @@
     <link rel="stylesheet" href="../simple.css">
 </head>
 <body>
-    <h1>0. Chapter Goals</h1>
-    <p>    I'll try to start each chapter with a brief overview of the goals we're going to pursue in the following sections and why we're working toward those things. Generally speaking I believe in making code that you can see working as soon as possible, but unfortunately we need to build up a basic foundation for us to put some substance on next chapter. The primary goal for this chapter is setting up our console heirarchy by establishing a UI Manager class and routing our screen to showing it. We'll also knock out a few helper methods that will make a few things much easier for us to do later. Next chapter we get to do the really fun stuff, I promise! </p>
+    <h1>0. Semi-Mandatory Preparations</h1>
+    <p> Before beginning this chapter, grab Visual Studio Community (or your IDE of choice, though SadConsole is available in NuGet and is much easier to install this way). If you're using Visual Studio, you can type <b>dotnet new install SadConsole.Templates</b> into the NuGet console to install a template that will get you into the game a little faster. If you did this it should add a template you can select when making a new project. Create a "SadConsole Game (MonoGame) (Thraka)" template project, and it should auto-populate your project with files called Program, GameSettings, and RootScreen. If you run it from this point, you should get a window filled with colorful garbage with a small space cleared where it says Hello World. If you've reached this point and see this screen, you're good to move on to the next step. </p>
  
-    <h1>1. UI/UIManager.cs</h1>
-    <p>    First things first, we're (probably) going to be making a lot of interfaces as we go, so start off by creating a new folder in your project called UI. Inside of this folder create a file called "<b>UIManager.cs</b>". Put the following code into it (replace SadTutorial with your project name/namespace):
+    <h1>0.5. Further Preparations</h1>
+    <p>Now that you've got a working SadConsole project, go to https://github.com/nanzington/nanzington.github.io and click on the resources folder. Download and extract fonts.zip to your root project directory (resulting in a folder being added there called fonts with the four files in it), then download SadAdditions.dll and Telepathy.dll and place those in your root project directory as well. In Visual Studio, right click on Dependencies in your project sidebar on the right, and click Add Project Reference. Navigate to your project directory and select the two DLLs to add as references, allowing their code to be used in the project. SadAdditions is my helper library that contains a lot of the functions I've built up over time to do specific things the way I like with SadConsole. Telepathy is a networking library we'll be using in the next chapter to set up a client-server architecture. If you don't want to do networking, feel free to skip downloading/adding Telepathy and jump over Chapter 1a to Chapter 2.</p>
+
+    <h1>1. Program.cs</h1>
+    <p> First thing we'll be doing now that all the preparations are out of the way is immediately making a mess of Thraka's nice clean template. Go to <b>Program.cs</b> and replace the code with the following code, which will cause the project to get mad and start throwing errors. We'll fix those in a moment. For now, the code:
     <div class="code_block">
-    using SadConsole;
-    using SadConsole.UI;
-    using SadRogue.Primitives;
-    using System; 
+    using SadConsole.Configuration;
+    using SadTutorial.UI;
+
+    Settings.WindowTitle = "SadTutorial";
+
+    Builder startup = new Builder()
+        .SetScreenSize(GameSettings.GameWidth, GameSettings.GameHeight)
+        .SetStartingScreen((host) => {
+            GameSettings.SquareFont = Game.Instance.Fonts["CheepicusExtended"];
+            GameSettings.UIManager = new UIManager();
+
+            GameSettings.UIManager.Init();
+
+            return GameSettings.UIManager;
+        })
+        .IsStartingScreenFocused(true)
+        .ConfigureFonts("./fonts/ThinExtended.font", new[] { "./fonts/CheepicusExtended.font" })
+        .AddFrameUpdateEvent(GameHost_FrameUpdate)
+        ;
+
+    Game.Create(startup);
+    Game.Instance.Run();
+    Game.Instance.Dispose();
+
+    static void GameHost_FrameUpdate(object sender, GameHost e) {
+        
+    }
+    </div>  
+    <p> This code is very similar to the code that was previously there, so let's go over the changes. First we set the starting screen using a lambda expression to get some prep work done in-line, returning GameSettings.UIManager at the end. This file will work very similarly to RootScreen does currently, but in a structure I'm more familiar with and can thus expand on more easily. The next major change is that ConfigureFonts is changed to reference the fonts you should have downloaded and placed in the previous step, setting the default font to ThinExtended and adding CheepicusExtended as a secondary font.</p>
+
+    <p>ThinExtended is a 7x12 font, while CheepicusExtended is a 12x12 font. This lets us save a decent amount of space if we only need to display text or numbers by using the thin font, while leaving the option of a square font for any time we need it (such as for a map). Finally we add a line to add a function onto the FrameUpdate, calling the function below at the end of each frame. We don't have anything we need to place there just yet, but we will in the Networking chapter and may have some other need for it in the future.</p>
+    <p>Last thing to do in this step is delete the RootScreen file, as we no longer need it.</p>
+
+    <h1>2. GameSettings.cs</h1>
+    <p> This file serves as a bucket for all of our "global" variables to be placed into.  Right now we don't have many variables (just the game width and height, a reference to our square font for quick access, and our UIManager), but eventually we'll be stuffing more things into here. For now, here's the code:
+    <div class="code_block">
+    using SadTutorial.UI;
+
+    public static class GameSettings {
+        public const int GameWidth = 160;
+        public const int GameHeight = 50;
+
+        public static IFont SquareFont;
+
+        public static UIManager UIManager; 
+    } 
+    </div>
+
+    <h1>3. UI/UIManager.cs </h1>
+    <p> As shown in the Program file we'll be using an object called UIManager as our core content container. Create a folder called UI in your root project directory, then add the following code:</p>
+    <div class="code_block">
+    using SadAdditions; 
 
     namespace SadTutorial.UI {
-        public class UIManager : ScreenObject {
-            public SadConsole.UI.Colors CustomColors;
+        public class UIManager : ScreenObject { 
             public UI_GameArea GameArea;
 
-            public UIManager() {
-                IsVisible = true;
-                IsFocused = true;
-                UseMouse = true;
-                Parent = GameHost.Instance.Screen;
-            }
+            public UIManager() {  }
 
             public override void Update(TimeSpan timeElapsed) {
                 if (GameArea.Win.IsVisible) {
@@ -39,466 +84,82 @@
                 }
 
 
-                //Helper.ClearKeys();
+                Miscellania.ClearKeys();
                 base.Update(timeElapsed);
             }
 
-            public void Init() {
-                SetupCustomColors();
-
-                GameArea = new(GameLoop.GameWidth, GameLoop.GameHeight);
-            }
-
-
-            private void SetupCustomColors() {
-                CustomColors = SadConsole.UI.Colors.CreateAnsi();
-                CustomColors.ControlHostBackground = new AdjustableColor(Color.Black, "Black");
-                CustomColors.Lines = new AdjustableColor(Color.White, "White");
-                CustomColors.Title = new AdjustableColor(Color.White, "White");
-
-                CustomColors.RebuildAppearances();
-                SadConsole.UI.Themes.Library.Default.Colors = CustomColors;
-            }
+            public void Init() { 
+                GameArea = new(GameSettings.GameWidth, GameSettings.GameHeight);
+            } 
         }
-    } 
-        </div>
-    </p>
-
-    <p>    The class inherits from ScreenObject - essentially this means it's a Console, like our startingConsole currently is in GameLoop. This lets us use it as the primary canvas we draw everything else on. In the constructor we make sure it's visible and is actually set to be displayed (by making it a child of the GameHost.Instance.Screen). Part of the ScreenObject definition is the Update method, which will get called every frame while the window is visible. In this instance that means it'll be a reliable way of doing a whole lot of important game things. The SetupCustomColors function overwrites the base SadConsole theme for lines and titles on windows to be white instead of orange like they normally are. You can set these colors to whatever you like if you don't want white borders, it's just personal preference. </p>
-    <p>    Before this latest addition to our project is complete, we need to replace our startingConsole in GameLoop with a UIManager variable called UIManager (still static) and the assignment to startingConsole with a simple <b>UIManager = new();</b> Unfortunately we can't print directly to the UIManager - it's not a Console, just a container for Consoles. There should be a few errors popping up right now, saying that UI_GameArea wasn't found. This is okay, we'll be fixing that shortly. First though, let's create a general template we can have interfaces inherit to save time. </p>
-    <br>
-    <h1>2. UI/InstantUI</h1>
+    }
+    </div>
+    <p> It inherits from ScreenObject, allowing it to be our core Screen holding everything, and has a single variable for now: GameArea. Our Update function is called automatically as part of it being the core Screen, and inside it we're simply checking to see if GameArea is visible (which it should almost always be), and calling Update/Input on it. <b>Miscellania.ClearKeys();</b> is the first usage of SadAdditions, and is part of the built-in hotkey system. It allows you to have buttons as hotkeys that are only called a single time per press regardless of how long you hold it down. This will make more sense as we get into UI_GameArea. Init is separate here because, as we'll see in InstantUI, one of the things InstantUI does is add itself as a child to UIManager to save as much typing as possible in UIManager.</p>
+ 
+    <h1>4. UI/InstantUI.cs</h1>
     <p>    There are a few things nearly all of our eventual interfaces have in common. They should all have a Window (so that we can have a nice border around the content), a handful of Consoles to print things on, an Update method to draw everything to the console, and an Input method for any interface-specific input we need. So let's create a new file in the UI folder called <b>"InstantUI.cs"</b> and put the following code into it. </p>
     <div class="code_block">
-    using SadConsole;
     using SadConsole.Input;
-    using SadConsole.UI;
-    using SadRogue.Primitives; 
+    using SadConsole.UI; 
 
     namespace SadTutorial.UI {
         public abstract class InstantUI {
-            public Console Con;
-            public Console SquareCon;
-            public Console DoubleSquareCon;
-            public Window Win; 
+            public ScreenSurface Con;
+            public ScreenSurface SquareCon;
+            public ScreenSurface DoubleSquareCon;
+            public Window Win;
 
             public InstantUI(int width, int height, string windowTitle = "") {
                 Win = new(width, height);
                 Win.CanDrag = true;
-                Win.Position = new((GameLoop.GameWidth - width)/2, (GameLoop.GameHeight - height)/2);
+                Win.Position = new((GameSettings.GameWidth - width) / 2, (GameSettings.GameHeight - height) / 2);
 
                 Con = new(width - 2, height - 2);
                 Con.Position = new(1, 1);
                 Win.Title = windowTitle.Align(HorizontalAlignment.Center, width - 2, (char)196);
 
-                SquareCon = new Console(new CellSurface(width, height), GameLoop.SquareFont);
+                SquareCon = new (new CellSurface(width, height), GameSettings.SquareFont);
                 SquareCon.UsePixelPositioning = true;
                 SquareCon.Position = new(7, 12);
 
-                DoubleSquareCon = new Console(new CellSurface(width / 2, height / 2), GameLoop.SquareFont, new Point(24, 24));
+                DoubleSquareCon = new (new CellSurface(width / 2, height / 2), GameSettings.SquareFont, new Point(24, 24));
                 DoubleSquareCon.UsePixelPositioning = true;
                 DoubleSquareCon.Position = new Point(7, 12);
 
                 Win.Children.Add(Con);
                 Win.Children.Add(SquareCon);
                 Win.Children.Add(DoubleSquareCon);
-                GameLoop.UIManager.Children.Add(Win);
+                GameSettings.UIManager.Children.Add(Win);
 
                 Win.Show();
-                Win.IsVisible = false; 
+                Win.IsVisible = false;
             }
 
 
-            public virtual void Update() { 
+            public virtual void Update() {
                 Con.Clear();
             }
 
             public virtual void Input() {
                 Point mousePos = new MouseScreenObjectState(Con, GameHost.Instance.Mouse).CellPosition;
-            }
-
-            public virtual void UI_Clicks(string ID) {
-
-            }
+            } 
         }
     } 
     </div>
     <p>    The constructor creates the Window (Win) and the three Consoles we want to work with (Con, SquareCon, and DoubleSquareCon), adds the Consoles as Children of Win, adds Win as a Child of UIManager, and sets the positions of everything accordingly. We don't want absolutely every interface to be draggable with the mouse or hidden when the game is launched - in fact, the first interfaces we make will change these things - but we do want that to be the default. We also place the interface more or less in the center of the screen and set the Title of the window to whatever string we pass in (defaulting to no title if we don't pass one in). </p>
   
-    <h1>3. UI/UI_GameArea.cs</h1>
+    <h1>5. UI/UI_GameArea.cs</h1>
     <p>   Time to clear up those missing reference errors from when we set up UIManager! Before we get to the helper function let's create an interface to utilize all our fancy new toys, since seeing it work is the best way to stay motivated. Create a new file in your UI folder called "<b>UI_GameArea.cs</b>" and put the following code into it: </p>
     <div class="code_block">
-    using SadConsole;
-    using SadConsole.Input;
-    using SadRogue.Primitives; 
-
-    namespace SadTutorial.UI {
-        public class UI_GameArea : InstantUI {  
-            public UI_GameArea(int width, int height) : base(width, height, "") {
-                Win.IsVisible = true;
-                Win.Position = new Point(0, 0);
-                Win.CanDrag = false;
-            }
-
-            public override void Update() {
-                Con.Clear();
-                SquareCon.Clear();
-                DoubleSquareCon.Clear();
-
-                Con.Print(0, 0, "Hello World!");  
-                SquareCon.Print(0, 1, "Hello World!"); 
-                DoubleSquareCon.Print(0, 1, "Hello World!");
-            }
-
-            public override void Input() {
-                
-            }
-
-            public override void UI_Clicks(string ID) { 
-
-            }
-        }
-    } 
-    </div>
-    <p>    This is a fairly typical implementation of our InstantUI class, though as stated previously we're using a few different
-    parameters to fit the needs of this specific interface, which will hold the core gameplay details like the map, sidebar, and message log. Creating this file should clear up the errors from UIManager. Back in <b>GameLoop.cs</b> underneath <b>UIManager = new();</b> add the line <b>UIManager.Init();</b>. Our Init method has to be outside the actual UIManager constructor because anything built off InstantUI wants to add itself as a child to UIManager, which it can only do after UIManager is fully done with the constructor. You can put the call to SetupCustomColors inside the constructor if you like, the location of that call doesn't really matter as long as it happens early.</p>
-
-    <p>     If everything has gone according to plan and I haven't forgotten to write out any steps I took in the code, at this point you should be able to run the project and see our trio of Hello Worlds! Additionally there should be a white box around the edge of the screen, defining the limits of the draw area.</p>
-
-    <h1>4. Helper.cs</h1>
-    <p>    This chapter has kinda dragged on but we're nearly done, just one more file to create before we can move on to some actual game
-    mechanics. In your main project directory (where GameLoop.cs is) create a file called <b>Helper.cs</b>. This file will contain
-    all of our various helper functions that we may need later for a wide variety of things. We won't add all my favorite bits right
-    now, we'll just add a couple and expand it in later chapters. Almost everything we put in Helper should be static, allowing us
-    to call it from any file by referencing <b>Helper.MethodName()</b>. Add the following code to your file:
-    </p>
-
-    <div class="code_block">
-    using SadConsole;
-    using SadConsole.Input;
-    using SadRogue.Primitives;
-    using System;
-    using System.Collections.Generic;
-
-    namespace SadTutorial {
-        public static class Helper { 
-            public static bool KeyPressed(Keys key) {
-                return GameHost.Instance.Keyboard.IsKeyPressed(key);
-            }
-
-            static HashSet<Keys> TriggeredHotkeys = new();
-            static HashSet<Keys> SecondaryList = new();
-            public static bool HotkeyDown(Keys key) {
-                if (!TriggeredHotkeys.Contains(key) && GameHost.Instance.Keyboard.IsKeyPressed(key)) {
-                    TriggeredHotkeys.Add(key);
-                    return true;
-                }
-
-                return false;
-            }
-
-            public static void ClearKeys() {
-                SecondaryList.Clear();
-                foreach (Keys key in TriggeredHotkeys) {
-                    if (GameHost.Instance.Keyboard.IsKeyDown(key)) {
-                        SecondaryList.Add(key);
-                    }
-                }
-                TriggeredHotkeys.Clear();
-
-                foreach (Keys key in SecondaryList) {
-                    TriggeredHotkeys.Add(key);
-                }
-            }
-
-            public static bool EitherShift() {
-                if (GameHost.Instance.Keyboard.IsKeyDown(Keys.LeftShift) || GameHost.Instance.Keyboard.IsKeyDown(Keys.RightShift))
-                    return true;
-                return false;
-            }
-            public static bool EitherControl() {
-                if (GameHost.Instance.Keyboard.IsKeyDown(Keys.LeftControl) || GameHost.Instance.Keyboard.IsKeyDown(Keys.RightControl))
-                    return true;
-                return false;
-            }  
-
-            public static ColoredString GetDarker(this ColoredString instance) {
-
-                for (int i = 0; i < instance.Length; i++) {
-                    instance[i].Foreground = instance[i].Foreground.GetDarker();
-                }
-
-                return instance;
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, string str, Action<string> OnClick, string ID) {
-                instance.PrintClickable(x, y, new ColoredString(str), OnClick, ID);
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, ColoredString str, Action<string> OnClick, string ID) {
-                Point mousePos = new MouseScreenObjectState(instance, GameHost.Instance.Mouse).CellPosition;
-
-                if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                    instance.Print(x, y, str.GetDarker());
-                }
-                else {
-                    instance.Print(x, y, str);
-                }
-
-                if (GameHost.Instance.Mouse.LeftClicked) {
-                    if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                        OnClick(ID);
-                    }
-                }
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, string str, Action OnClick) {
-                instance.PrintClickable(x, y, new ColoredString(str), OnClick);
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, ColoredString str, Action OnClick) {
-                Point mousePos = new MouseScreenObjectState(instance, GameHost.Instance.Mouse).CellPosition;
-
-                if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                    instance.Print(x, y, str.GetDarker());
-                } else {
-                    instance.Print(x, y, str);
-                }
-
-                if (GameHost.Instance.Mouse.LeftClicked) {
-                    if (mousePos.X >= x && mousePos.X <= x + str.Length && mousePos.Y == y) {
-                        OnClick();
-                    }
-                }
-            }
-        }
-    } 
-    </div>
-    <p>    Whole bunch of new functions here, so let's take a quick look at what they're all for:</p>
-    <ul>
-        <li>KeyPressed: This one is just an alias, because Helper.KeyPressed is shorter than the full reference</li>
-        <li>HotkeyDown and ClearKeys: These are to create a global hotkey system that triggers keys exactly once.</li>
-        <li>EitherShift and EitherControl: Pretty self-explanatory, normally you have to call the Left and Right keys separately. This combines them into one check.</li>
-        <li>GetDarker: Given an input ColoredString, returns a ColoredString that has all the foreground colors made darker. This is used for..</li>
-        <li>PrintClickable: The first is an alias to the second (in case we want to print a normal string). The second creates a string that we can click to run a passed function. There are two pairs here, one that requires the passed function to have a string parameter and another that doesn't.</li>
-    </ul>
-    <p>    The astute among you may notice that the first PrintClickable function pair happens to want a function signature that looks like UI_Clicks in our InstantUI. This is what that was for, so that we can handle clicked strings. We'll hop over to UI_GameArea and do a few demos so we can see the helper code in action, then we'll call it good for this chapter.</p>
-
-
-    <p>    Add four new variables to UI_GameArea: <b>int counter = 0;</b>, <b>bool switch1 = false;</b>, <b>bool switch2 = false;</b>, and <b>bool clickSwitch = false;</b>
-    In GameLoop.Update, uncomment the <b>Helper.ClearKeys();</b> call so that our new hotkey function actually works.
-    In UI_GameArea.Update, add the following code:
-    </p>
-    <div class="code_block">
-    if (Helper.KeyPressed(Keys.Space)) {
-        switch1 = !switch1;
-    }
-
-    if (Helper.HotkeyDown(Keys.Space)) {
-        switch2 = !switch2;
-    }
-
-    Con.Print(0, 4, "Switch 1 (Spacebar): " + switch1.ToString());
-    Con.Print(0, 5, "Switch 2 (Space hotkey): " + switch2.ToString());
-    Con.PrintClickable(0, 6, "Click Switch: " + clickSwitch.ToString() + " [" + counter + " clicks]", UI_Clicks, "clickedSwitch");
-    Con.PrintClickable(0, 7, "Lambda Click: " + clickSwitch.ToString() + " [" + counter + " clicks]", () => {
-        clickSwitch = !clickSwitch;
-        counter++;
-    });
-    </div>
-    <p>   And add this to the UI_GameArea.UI_Clicks function body:</p>
-    <div class="code_block">
-    if (ID == "clickedSwitch") {
-        clickSwitch = !clickSwitch;
-        counter++;
-    } 
-    </div>
-    <p>   If you've done everything right (and I didn't forget anything), when you run the program you should see three extra lines on the left side of the window below "Hello World". If you hold space down you'll notice the first switch (simply Helper.KeyPressed) toggles every frame, while the second switch (Helper.HotkeyDown) switches only each time you <em>press</em> space - regardless of how long you hold it down. The third switch turns gray when you hover over it (as darker white is gray), and toggles when you click it, on top of counting how many total times you've clicked. The fourth looks identical to the third switch, but on the backend we handle what it does dynamically in-line instead of calling to another place in the code. These functions are things we'll use a lot in the coming chapters for a wide variety of things, so it's important to understand how they work. </p>
-
-    <p>    The most complicated piece of code added to UI_GameArea are the PrintClickable line, which you will notice passes <b>UI_Clicks</b> (NOT UI_Clicks(), note the lack of parens) in the fourth parameter, and "clickedSwitch" in the fifth parameter. You can pass any function into the fourth slot as long as it returns void and only takes a single string as a parameter. Inside of the function you can use if-statements or switch statements or anything else you like to
-    take the passed string and decide what action to take with it. In this case we just pass in "clickedSwitch" and say that when we get "clickedSwitch" we want to toggle the clickSwitch and add 1 to the counter. The second PrintClickable call uses the parameter-less version with a lambda expression to do the same thing but in a single line.
-    </p>
-
-    <h1>5. Conclusion</h1>
-    <p>    Wow, that was a lot of work! But we've got a great base to build the rest of the project on now, and next chapter we
-    can get into some actual gameplay mechanics. All the new files are provided in full below in addition to being stored in the
-    Github repository by chapter. 
-    </p>
-
-
-
-    <button type="button" class="collapsible"><b>Complete</b> GameLoop.cs</button>
-    <div class="hidden_block">
-    using SadConsole;
-    using SadRogue.Primitives;
-    using SadTutorial.UI;
-    using Console = SadConsole.Console;
-
-    namespace SadTutorial {
-        class GameLoop {
-            public const int GameWidth = 160;
-            public const int GameHeight = 50;
-            public const int MapWidth = 70;
-            public const int MapHeight = 43;
-
-            public static SadFont SquareFont;
-
-            public static UIManager UIManager;
-
-            static void Main(string[] args) {
-                // Setup the engine and create the main window. 
-                Game.Create(GameWidth, GameHeight, "./fonts/ThinExtended.font");
-
-                // Hook the start event so we can add consoles to the system.
-                Game.Instance.OnStart = Init;
-
-                // Start the game.
-                Game.Instance.Run();
-                Game.Instance.Dispose();
-            }
-
-            private static void Init() {
-                // Load up our square font (CheepicusExtended) and save it for later - our game map will use it, while the rest defaults to our thin font.
-                SquareFont = (SadFont)GameHost.Instance.LoadFont("./fonts/CheepicusExtended.font");
-                // Set the window title to whatever you like, probably the name of your project.
-                Game.Instance.MonoGameInstance.Window.Title = "SadTutorial";
-
-                // Initialize our UIManager
-                UIManager = new();
-
-                // Initialize the interfaces within UIManager, plus anything else we need to set up.
-                UIManager.Init();
-            }
-        }
-    } 
-    </div> 
-
-    <br>
-    <br>
-
-    <button type="button" class="collapsible"><b>Complete</b> UI/UIManager.cs</button>
-    <div class="hidden_block">
-    using SadConsole;
-    using SadConsole.UI;
-    using SadRogue.Primitives;
-    using System; 
-
-    namespace SadTutorial.UI {
-        public class UIManager : ScreenObject {
-            public SadConsole.UI.Colors CustomColors;
-            public UI_GameArea GameArea;
-
-            public UIManager() {
-                IsVisible = true;
-                IsFocused = true;
-                UseMouse = true;
-                Parent = GameHost.Instance.Screen;
-            }
-
-            public override void Update(TimeSpan timeElapsed) {
-                if (GameArea.Win.IsVisible) {
-                    GameArea.Update();
-                    GameArea.Input();
-                }
-
-
-                Helper.ClearKeys();
-                base.Update(timeElapsed);
-            }
-
-            public void Init() {
-                SetupCustomColors(); 
-                GameArea = new(GameLoop.GameWidth, GameLoop.GameHeight);
-            }
-
-
-            private void SetupCustomColors() {
-                CustomColors = SadConsole.UI.Colors.CreateAnsi();
-                CustomColors.ControlHostBackground = new AdjustableColor(Color.Black, "Black");
-                CustomColors.Lines = new AdjustableColor(Color.White, "White");
-                CustomColors.Title = new AdjustableColor(Color.White, "White");
-
-                CustomColors.RebuildAppearances();
-                SadConsole.UI.Themes.Library.Default.Colors = CustomColors;
-            }
-        }
-    } 
-    </div> 
-
-    <br>
-    <br>
-
-    <button type="button" class="collapsible"><b>Complete</b> UI/InstantUI.cs</button>
-    <div class="hidden_block">
-    using SadConsole;
-    using SadConsole.Input;
-    using SadConsole.UI;
-    using SadRogue.Primitives; 
-
-    namespace SadTutorial.UI {
-        public abstract class InstantUI {
-            public Console Con;
-            public Console SquareCon;
-            public Console DoubleSquareCon;
-            public Window Win; 
-
-            public InstantUI(int width, int height, string windowTitle = "") {
-                Win = new(width, height);
-                Win.CanDrag = true;
-                Win.Position = new((GameLoop.GameWidth - width)/2, (GameLoop.GameHeight - height)/2);
-
-                Con = new(width - 2, height - 2);
-                Con.Position = new(1, 1);
-                Win.Title = windowTitle.Align(HorizontalAlignment.Center, width - 2, (char)196);
-
-                SquareCon = new Console(new CellSurface(width, height), GameLoop.SquareFont);
-                SquareCon.UsePixelPositioning = true;
-                SquareCon.Position = new(7, 12);
-
-                DoubleSquareCon = new Console(new CellSurface(width / 2, height / 2), GameLoop.SquareFont, new Point(24, 24));
-                DoubleSquareCon.UsePixelPositioning = true;
-                DoubleSquareCon.Position = new Point(7, 12);
-
-                Win.Children.Add(Con);
-                Win.Children.Add(SquareCon);
-                Win.Children.Add(DoubleSquareCon);
-                GameLoop.UIManager.Children.Add(Win);
-
-                Win.Show();
-                Win.IsVisible = false; 
-            }
-
-
-            public virtual void Update() { 
-                Con.Clear();
-            }
-
-            public virtual void Input() {
-                Point mousePos = new MouseScreenObjectState(Con, GameHost.Instance.Mouse).CellPosition;
-            }
-
-            public virtual void UI_Clicks(string ID) {
-
-            }
-        }
-    } 
-    </div> 
-
-    <br>
-    <br>
-
-    <button type="button" class="collapsible"><b>Complete</b> UI/UI_GameArea.cs</button>
-    <div class="hidden_block">
-    using SadConsole;
-    using SadConsole.Input;
-    using SadRogue.Primitives; 
+    using SadAdditions; 
+    using SadConsole.Input; 
 
     namespace SadTutorial.UI {
         public class UI_GameArea : InstantUI {
             int counter = 0;
             bool switch1 = false;
             bool switch2 = false;
-            bool clickSwitch = false;
+            bool clickSwitch = false; 
 
             public UI_GameArea(int width, int height) : base(width, height, "") {
                 Win.IsVisible = true;
@@ -507,151 +168,61 @@
             }
 
             public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
                 Con.Clear();
                 SquareCon.Clear();
                 DoubleSquareCon.Clear();
 
-                Con.Print(0, 0, "Hello World!");  
-                SquareCon.Print(0, 1, "Hello World!"); 
+                Con.Print(0, 0, "Hello World!");
+                SquareCon.Print(0, 1, "Hello World!");
                 DoubleSquareCon.Print(0, 1, "Hello World!");
 
-                if (Helper.KeyPressed(Keys.Space)) {
+                if (Shorthands.KeyPressed(Keys.Space)) {
                     switch1 = !switch1;
                 }
 
-                if (Helper.HotkeyDown(Keys.Space)) {
+                if (Miscellania.HotkeyDown(Keys.Space)) {
                     switch2 = !switch2;
                 }
 
-                Con.Print(0, 4, "Switch 1 (Spacebar): " + switch1.ToString());
-                Con.Print(0, 5, "Switch 2 (Space hotkey): " + switch2.ToString());
-                Con.PrintClickable(0, 6, "Click Switch: " + clickSwitch.ToString() + " [" + counter + " clicks]", UI_Clicks, "clickedSwitch");
-                Con.PrintClickable(0, 7, "Lambda Click: " + clickSwitch.ToString() + " [" + counter + " clicks]", () => {
+                Con.Print(0, 5, "Switch 1 (Spacebar): " + switch1.ToString());
+                Con.Print(0, 6, "Switch 2 (Space hotkey): " + switch2.ToString()); 
+                Con.PrintClickable(0, 8, "Lambda Click: " + clickSwitch.ToString() + " [" + counter + " clicks]", () => {
                     clickSwitch = !clickSwitch;
                     counter++;
                 });
+
+                Con.PrintClickable(0, 9, "Non-lambda Click: " + clickSwitch.ToString() + " [" + counter + " clicks]", ButtonClick);
             }
 
             public override void Input() {
-                
-            }
 
-            public override void UI_Clicks(string ID) { 
-                if (ID == "clickedSwitch") {
-                    clickSwitch = !clickSwitch;
-                    counter++;
-                }
+            } 
+
+            public void ButtonClick() {
+                clickSwitch = !clickSwitch;
+                counter++;
             }
         }
     } 
-    </div> 
-    <br><br>
+    </div>
+    <p>    This is a fairly typical implementation of our InstantUI class, though as stated previously we're using a few different parameters to fit the needs of this specific interface, which will hold the core gameplay details like the map, sidebar, and message log. Just for fun and to display some of the functions we'll be using extensively, we have some variables to play with and a few lines in the Update to interact with them. </p>
 
-    <button type="button" class="collapsible"><b>Redundant but Complete</b> Helper.cs</button>
-    <div class="hidden_block">
-    using SadConsole;
-    using SadConsole.Input;
-    using SadRogue.Primitives;
-    using System;
-    using System.Collections.Generic;
+    <p> First some boilerplate: we clear the Window and all three Consoles, then draw a box around the edge of the Window to make it look nice. In addition we've got a trio of Hello Worlds to display the differences in the fonts and sizes. Below this we've got our interactables.</p>
 
-    namespace SadTutorial {
-        public static class Helper { 
-            public static bool KeyPressed(Keys key) {
-                return GameHost.Instance.Keyboard.IsKeyPressed(key);
-            }
+    <p>The first two interactables demonstrate the difference between KeyPressed, which will trigger rapidly if you hold the key down, and the Hotkey system that only triggers once per press. In both cases we're just flipping the bool to the opposite of the value it holds. We display the current status of the bools with two Print statements.</p>
+   
+    <p>The final Print statements use an extension from SadAdditions, creating a line of text that we can click to run a function. The first one uses a lambda expression to run code in-line, while the second passes in a function from elsewhere in the file. As you can see when running the program, both function identically, and which you choose to use is situational or personal preference.</p>
 
-            static HashSet<Keys> TriggeredHotkeys = new();
-            static HashSet<Keys> SecondaryList = new();
-            public static bool HotkeyDown(Keys key) {
-                if (!TriggeredHotkeys.Contains(key) && GameHost.Instance.Keyboard.IsKeyPressed(key)) {
-                    TriggeredHotkeys.Add(key);
-                    return true;
-                }
-
-                return false;
-            }
-
-            public static void ClearKeys() {
-                SecondaryList.Clear();
-                foreach (Keys key in TriggeredHotkeys) {
-                    if (GameHost.Instance.Keyboard.IsKeyDown(key)) {
-                        SecondaryList.Add(key);
-                    }
-                }
-                TriggeredHotkeys.Clear();
-
-                foreach (Keys key in SecondaryList) {
-                    TriggeredHotkeys.Add(key);
-                }
-            }
-
-            public static bool EitherShift() {
-                if (GameHost.Instance.Keyboard.IsKeyDown(Keys.LeftShift) || GameHost.Instance.Keyboard.IsKeyDown(Keys.RightShift))
-                    return true;
-                return false;
-            }
-            public static bool EitherControl() {
-                if (GameHost.Instance.Keyboard.IsKeyDown(Keys.LeftControl) || GameHost.Instance.Keyboard.IsKeyDown(Keys.RightControl))
-                    return true;
-                return false;
-            }  
-
-            public static ColoredString GetDarker(this ColoredString instance) {
-
-                for (int i = 0; i < instance.Length; i++) {
-                    instance[i].Foreground = instance[i].Foreground.GetDarker();
-                }
-
-                return instance;
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, string str, Action<string> OnClick, string ID) {
-                instance.PrintClickable(x, y, new ColoredString(str), OnClick, ID);
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, ColoredString str, Action<string> OnClick, string ID) {
-                Point mousePos = new MouseScreenObjectState(instance, GameHost.Instance.Mouse).CellPosition;
-
-                if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                    instance.Print(x, y, str.GetDarker());
-                }
-                else {
-                    instance.Print(x, y, str);
-                }
-
-                if (GameHost.Instance.Mouse.LeftClicked) {
-                    if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                        OnClick(ID);
-                    }
-                }
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, string str, Action OnClick) {
-                instance.PrintClickable(x, y, new ColoredString(str), OnClick);
-            }
-
-            public static void PrintClickable(this SadConsole.Console instance, int x, int y, ColoredString str, Action OnClick) {
-                Point mousePos = new MouseScreenObjectState(instance, GameHost.Instance.Mouse).CellPosition;
-
-                if (mousePos.X >= x && mousePos.X < x + str.Length && mousePos.Y == y) {
-                    instance.Print(x, y, str.GetDarker());
-                } else {
-                    instance.Print(x, y, str);
-                }
-
-                if (GameHost.Instance.Mouse.LeftClicked) {
-                    if (mousePos.X >= x && mousePos.X <= x + str.Length && mousePos.Y == y) {
-                        OnClick();
-                    }
-                }
-            }
-        }
-    } 
-    </div> 
-
+    <h1>5. Conclusion</h1>
+    <p>    Wow, that was a lot of work! But we've got a great base to build the rest of the project on now, and next chapter we
+    can get into some actual gameplay mechanics. All the files for all chapters are stored by chapter in the <a href="https://github.com/nanzington/nanzington.github.io">GitHub repository</a>. In future chapters where we're modifying existing files, the full files will be placed at the end of the chapter for convenience.</p> 
 
     <p>
+    <a href="./01n.html">Chapter 01n: Networking</a>
+    <br>
     <a href="./02.html">Chapter 02: Basic Movement</a>
     <br>
     <a href="../index.html">Back to Index</a></p>
