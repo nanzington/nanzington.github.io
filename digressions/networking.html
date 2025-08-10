@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SadTutorial Core 01n - Networking</title>
+    <title>SadTutorial Digressions - Networking</title>
     <link rel="stylesheet" href="../style.css">
     <link rel="stylesheet" href="../simple.css">
 </head>
 <body>
     <h1>0. Chapter Goals</h1>
-    <p>"Networking?!" you may ask? Networking! There's not that many tutorials out there on how to handle networking in a relatively simple way for games. The library we'll be using is message-based and asynchronous, which is how Valve's Steamworks API works as well, so a lot of these concept should translate if you are making a game for release on Steam. The pattern we're going for results in a game where the client program can host a server freely, allowing others to connect. This is a little inconvenient if you want a more MMO style thing, but with a little elbow grease it should work for a decent number of simultaneous players. </p>
+    <p>"Networking?!" you may ask? Networking! There's not that many tutorials out there on how to handle networking in a relatively simple way for games. The library we'll be using is message-based and asynchronous, which is how Valve's Steamworks API works as well, so a lot of these concept should translate if you are making a game for release on Steam. The pattern we're going for results in a game where the client program can host a server freely, allowing others to connect. This is a little inconvenient if you want a more MMO style thing, but with a little elbow grease it should work for a decent number of simultaneous players. For this tutorial, start with the finished Chapter 1 code as a base if starting from scratch. Most of the networking code is isolated enough to just drop into an existing project if desired.</p>
  
     <h1>1. Telepathy</h1>
     <p>No, not the superpower, it's the networking library we'll be using. Grab the Telepathy.dll from the resources folder of this tutorial, where you were hopefully able to also get the fonts.zip, and put it in the root of your project. On the right sidebar right click Dependencies and add a project dependency, then navigate to your project folder and select Telepathy.dll. This should properly link up things so that you can reference it via code, which we'll be doing extensively in <b>NetworkManager.cs</b> in a moment. </p>
@@ -539,7 +539,7 @@
     </div>
 
     <p>
-    <a href="./02.html">Chapter 02: TBD</a>
+    <a href="./02.html">Chapter 02: Maps and Actors</a>
     <br>
     <a href="../index.html">Back to Index</a></p>
     <script src="../javascript.js"></script>

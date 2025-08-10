@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Core 02 - Maps and Actors</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>We'll be covering creating some simple structures for actors (things that can move) and maps (places to move) in this chapter. By the end of the chapters you should have a simple map with walls randomly placed in it. In an effort to make this less of a copy and paste guide, I'll be trying to give you the code less unless it's hard to describe. If you have issues understanding what I'm going for, all the code blocks will be at the end of the chapter.</p>
+ 
+    <h1>1. Structures</h1>
+    <p>Create a folder in your projects root directory called <b>Data</b>. All the following structures will go into this. Next, create a file in it called <b>Renderable.cs</b> with three variables: a string for the name of the entity, an int for the glyph used to draw them, and a SadRogue.Primitives.Color for their foreground color. Create a constructor to set all of these, and then add a function to the file named <b>GetAppearance</b> that returns a ColoredString. Use a ColoredString constructor with our Glyph as the string and our Foreground as the Color, with the background Color set to Black. Helpful tip: SadAdditions has an extension for ints (int.AsString()) that converts the int to a char, then casts that to a string to get the glyph at the specified index instead of as a number.</p>
+
+    <p>Next up create two more files, both inheriting from Renderable, called <b>Tile.cs</b> and <b>Entity.cs</b>. Add a string variable for their name to both, and add ints to store X and Y coordinates to Entity. Tile should also get two bools, one for whether or not it blocks movement, and another for whether it blocks vision. Create new constructors for both classes to incorporate the new variables while sending the color and glyph up the chain to Renderable's constructor. Now we go one layer deeper, and make a file called <b>Actor.cs</b> that inherits from <b>Entity</b>. No new data is required for Actors just yet, so just create a constructor identical to the Entity constructor. We'll finish this section by going yet another layer deeper, creating a file called <b>Player.cs</b> that inherits from Actor. The constructor for Player can be simplified to only needing a name, x, and y, as the player can always use a white @ as their appearance. Feel free to change the color or symbol if you like.</p>
+
+    <p>Now for something a little different, create a file called <b>Map.cs</b> and add three variables to it: a Tile array, an int to store the Width of the map, and an int to store the Height of the map. For the constructor only accept the width and height. Initialize the Tile array to the size of width x height, then use two nested for-loops to fill it. Tiles around the edge of the map should be set to Walls, while the center tiles should be set to Floors. Take a brief detour to <b>GameSettings.cs</b> and add a System.Random variable, which we'll be using extensively throughout the rest of the project. Back in <b>Map.cs</b> add a second for-loop after the first and set it to run 100 times, changing a random Tile from the array to a Wall each time.</p>
+
+    <p>The final structure we need before moving on will be a new file called <b>World.cs</b>. For now all it needs to hold is Map and a Player. The constructor doesn't need anything passed in, just place the Player at 5,5 and instantiate the Map with size 48, 48. Go to <b>GameSettings</b> again and add a line to create a static World, as it'll be very useful for us to be able to access that from any files later.</p>
+
+    <h1>2. Drawing the Map and Player</h1>
+    <p> Head over to <b>UI_GameArea</b> and remove everything after the .Clear() statements from Update(). Draw a line on Con from 74,0 to 74,48 with glyph 179. This should create a straight line in the middle of the screen. After that create a nested for-loop to iterate through all positions in GameSettings.World.CurrentMap.Tiles and print them on SquareCon (using the GetAppearance function we created). If you used map size 48,48, then printing with an X-offset of 44 (and Y of 0) should draw the map perfectly filling the right half of our screen. After that loop create a simple Print statement to draw the Player with the same offset. If everything went according to plan, you should see approximately the same thing as shown in the following image.</p>
+
+    <img src="../resources/Images/initialMap.png">
+
+    <h1>3. Moving the Player</h1>
+    <p>In the formerly empty Input function in <b>UI_GameArea</b>, place code that checks for WASD being pressed (Shorthands.KeyPressed is one way to do this, if using SadAdditions). Manipulate GameSettings.World.Player.X and GameSettings.World.Player.Y as needed. Now you should be able to move the player icon around. But wait, it isn't checking to see if the tiles are actually walkable! Add two ints before the KeyPressed checks, dx and dy. Instead of moving the player when pressing a key, set the dx or dy to the position they would move to (so for up, set dy to -1). After the KeyPressed calls, check to see if either of dx or dy aren't zero, then create a <b>Tile?</b> using the TileAt function we created in Map on the players position modified by dx and dy. If this tile isn't null and doesn't block movement, finally modify the Player position by dx and dy. Now you should be able to walk around the map properly impeded by walls!.</p>
+ 
+    <h1>4. Conclusion</h1>
+    <p> If you've followed all the steps, and I didn't forget anything, then you should now have a simple map cluttered with random walls that you can navigate in using a Player object. Still a long way to go, but our game is starting to look more like a game! If you had any trouble following the instructions, all of the modified files are provided below for convenience.<p>
+    
+    <button type="button" class="collapsible">The first button is broken and I don't know how to fix it</button>
+    <div class="hidden_block"> 
+    </div>
+ 
+    <button type="button" class="collapsible">Data/Renderable.cs</button>
+    <div class="hidden_block"> 
+    using SadAdditions;
+
+    namespace SadTutorial.Data {
+        public class Renderable {
+            public string Name = "";
+            public int Glyph;
+            public Color Foreground;
+
+            public Renderable(string n, int g, Color c) {
+                Name = n;
+                Glyph = g;
+                Foreground = c;
+            }
+
+            public ColoredString GetAppearance() {
+                return new ColoredString(Glyph.AsString(), Foreground, Color.Black);
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Tile.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Tile : Renderable {
+            public string Name = "";
+            public bool BlocksMove = false;
+            public bool BlocksLOS = false;
+
+            public Tile(string n, int g, Color c, bool blockMove, bool blockLOS) : base(g, c) {
+                Name = n;
+                BlocksMove = blockMove;
+                BlocksLOS = blockLOS;
+            } 
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Entity.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Entity : Renderable{
+            public string Name = "";  
+            public int X, Y;
+
+            public Entity(string n, int g, Color c) : base(g, c) {
+                Name = n; 
+            } 
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Actor.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Actor : Entity { 
+            public Actor(string name, int glyph, Color col, int x, int y) : base(name, glyph, col, x, y) { 
+            }
+        }
+    }
+    </div>
+
+    <button type="button" class="collapsible">Data/Player.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Player : Actor { 
+            public Player(string name, int x, int y) : base(name, '@', Color.White, x, y) {
+            }
+        }
+    } 
+    </div> 
+
+    <button type="button" class="collapsible">Data/Map.cs</button>
+    <div class="hidden_block">  
+    namespace SadTutorial.Data {
+        public class Map {
+            public Tile[] Tiles;
+            public int Width;
+            public int Height; 
+
+            public Map(int width, int height) {
+                Tiles = new Tile[width * height];
+                Width = width;
+                Height = height;
+
+                for (int x = 0; x < Width; x++) {
+                    for (int y = 0; y < Height; y++) {
+                        if (x == 0 || y == 0 || x == Width - 1 || y == Height - 1) {
+                            Tiles[x + y * Width] = new Tile("Stone Wall", '#', Color.DimGray, true, true); 
+                        } else {
+                            Tiles[x + y * Width] = new Tile("Stone Floor", '.', Color.DarkGray, false, false);
+                        }
+                    }
+                }
+            }
+
+            public Tile? TileAt(int x, int y) {
+                if (x >= 0 && x < Width && y >= 0 && y < Height) {
+                    return Tiles[x + y * Width];
+                }
+                return null;
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/World.cs</button>
+    <div class="hidden_block">  
+    namespace SadTutorial.Data {
+        public class World {
+            public Map CurrentMap;
+            public Player Player;
+
+            public World() {
+                CurrentMap = new(48, 48);
+                Player = new("Player", 5, 5);
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">GameSettings.cs</button>
+    <div class="hidden_block">  
+    using SadTutorial.Data;
+    using SadTutorial.UI;
+
+    public static class GameSettings {
+        public const int GameWidth = 160;
+        public const int GameHeight = 50;
+
+        public static IFont SquareFont;
+
+        public static UIManager UIManager;
+
+        public static Random rand = new Random();
+        public static World World = new World();
+    } 
+    </div>
+
+    <button type="button" class="collapsible">UI/UI_GameArea.cs</button>
+    <div class="hidden_block">  
+    using SadAdditions; 
+    using SadConsole.Input;
+    using SadTutorial.Data;
+
+    namespace SadTutorial.UI {
+        public class UI_GameArea : InstantUI {
+            int counter = 0;
+            bool switch1 = false;
+            bool switch2 = false;
+            bool clickSwitch = false; 
+
+            public UI_GameArea(int width, int height) : base(width, height, "") {
+                Win.IsVisible = true;
+                Win.Position = new Point(0, 0);
+                Win.CanDrag = false;
+            }
+
+            public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+                Con.Clear();
+                SquareCon.Clear();
+                DoubleSquareCon.Clear(); 
+
+                Con.DrawLine(new Point(74, 0), new Point(74, 48), 179);
+
+                for (int x = 0; x < GameSettings.World.CurrentMap.Width; x++) {
+                    for (int y = 0; y < GameSettings.World.CurrentMap.Height; y++) {
+                        Tile tile = GameSettings.World.CurrentMap.TileAt(x, y);
+
+                        if (tile != null) {
+                            SquareCon.Print(44 + x, y, tile.GetAppearance());
+                        }
+                    }
+                }
+
+                SquareCon.Print(44 + GameSettings.World.Player.X, GameSettings.World.Player.Y, GameSettings.World.Player.GetAppearance());
+            }
+
+            public override void Input() {
+                int dx = 0;
+                int dy = 0;
+                if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+                if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+                if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+                if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+                if (dx != 0 || dy != 0) {
+                    Tile? dest = GameSettings.World.CurrentMap.TileAt(GameSettings.World.Player.X + dx, GameSettings.World.Player.Y + dy);
+
+                    if (dest != null && !dest.BlocksMove) {
+                        GameSettings.World.Player.X += dx;
+                        GameSettings.World.Player.Y += dy;
+                    }
+                }
+            } 
+
+            public void ButtonClick() {
+                clickSwitch = !clickSwitch;
+                counter++;
+            }
+        }
+    } 
+    </div>
+
+
+    <p>
+    <a href="./01.html">Chapter 01: Some Foundational Work</a>
+    <br> 
+    <a href="./03.html">Chapter 03: TBD</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>
