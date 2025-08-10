@@ -30,12 +30,8 @@
     <p>In the formerly empty Input function in <b>UI_GameArea</b>, place code that checks for WASD being pressed (Shorthands.KeyPressed is one way to do this, if using SadAdditions). Manipulate GameSettings.World.Player.X and GameSettings.World.Player.Y as needed. Now you should be able to move the player icon around. But wait, it isn't checking to see if the tiles are actually walkable! Add two ints before the KeyPressed checks, dx and dy. Instead of moving the player when pressing a key, set the dx or dy to the position they would move to (so for up, set dy to -1). After the KeyPressed calls, check to see if either of dx or dy aren't zero, then create a <b>Tile?</b> using the TileAt function we created in Map on the players position modified by dx and dy. If this tile isn't null and doesn't block movement, finally modify the Player position by dx and dy. Now you should be able to walk around the map properly impeded by walls!.</p>
  
     <h1>4. Conclusion</h1>
-    <p> If you've followed all the steps, and I didn't forget anything, then you should now have a simple map cluttered with random walls that you can navigate in using a Player object. Still a long way to go, but our game is starting to look more like a game! If you had any trouble following the instructions, all of the modified files are provided below for convenience.<p>
-    
-    <button type="button" class="collapsible">The first button is broken and I don't know how to fix it</button>
-    <div class="hidden_block"> 
-    </div>
- 
+    <p> If you've followed all the steps, and I didn't forget anything, then you should now have a simple map cluttered with random walls that you can navigate in using a Player object. Still a long way to go, but our game is starting to look more like a game! If you had any trouble following the instructions, all of the modified files are provided below for convenience.</p>
+      
     <button type="button" class="collapsible">Data/Renderable.cs</button>
     <div class="hidden_block"> 
     using SadAdditions;
