@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Digressions - Alternate Maps</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>I see requests for alternate ways of handling the map often in the discord, so I decided to write up a quick guide for how to convert the map code from Chapter 2 into various other ways of rendering. We'll start by classifying what we already have: finite static filled. Finite because we're using an Array to hold the tiles versus something that can expand as needed, static because the map doesn't move - we can see all of it at once, and filled because we know every position in the map has a tile in it. With that worked out, we can infer that other map types include the opposites of each and all the combinations therein. So grab the Chapter 2 code and lets get started.</p>
+
+    <h1>1. Filled -> Sparse</h1>
+    <p>In <b>Data/Map.cs</b> add a Tile variable called Default. This will serve as what we assume 'empty' spots in our array to be. Either add it to the constructor or initialize it in the constructor, either way as our Stone Floor tile. Change the Tile[] array to a Tile?[] array, allowing entries to be null. In the for-loops where we set things to walls or floors, replace the line setting spots to floors to set them to null. Finally in the TileAt function, add an extra check before returning Tiles[x + y * Width]. If that index is null, return our Default tile instead. Note that now you can change just the default initialization and all of the floor tiles will change together. Code follows.</p>
+
+    <div class="code_block">
+    namespace SadTutorial.Data {
+        public class Map {
+            public Tile?[] Tiles;
+            public int Width;
+            public int Height;
+
+            public Tile Default;
+
+            public Map(int width, int height, Tile def) {
+                Tiles = new Tile[width * height];
+                Width = width;
+                Height = height;
+                Default = def;
+
+                for (int x = 0; x < Width; x++) {
+                    for (int y = 0; y < Height; y++) {
+                        if (x == 0 || y == 0 || x == Width - 1 || y == Height - 1) {
+                            Tiles[x + y * Width] = new Tile("Stone Wall", '#', Color.DimGray, true, true); 
+                        } else {
+                            Tiles[x + y * Width] = null;
+                        }
+                    }
+                }
+
+                for (int i = 0; i < 100; i++) {
+                    Tiles[GameSettings.rand.Next(Tiles.Length)] = new Tile("Stone Wall", '#', Color.DimGray, true, true);
+                }
+            }
+
+            public Tile? TileAt(int x, int y) {
+                if (x >= 0 && x < Width && y >= 0 && y < Height) {
+                    if (Tiles[x + y * Width] == null)
+                        return Default;
+                    return Tiles[x + y * Width];
+                }
+                return null;
+            }
+        }
+    } 
+    </div>
+    
+    <h1>2. Static -> Scrolling</h1>
+    <p>For our for-loops to draw the map, change the starting points to Player.X or Y - 24 and the end point to Player.X or Y + 24. The actual spot we'll be printing them changes accordingly (otherwise you'll be drawing off the window if you move far enough). Create variables for printX and printY, both equal to Player.X or Y - x or y.We also have to add another 23,23 offset to the print statements (we're drawing relative to that spot, after all), and print the Player icon at a static 44 + 23, 23. The only other change needed is you have to invert the movement dX and dY, as you're effectively moving the map rather than the player with this method. Code for the for-loops follows.</p>
+
+    <div class="code_block">
+    for (int x = GameSettings.World.Player.X - 24; x < GameSettings.World.Player.X + 24; x++) {
+        for (int y = GameSettings.World.Player.Y - 24; y < GameSettings.World.Player.Y + 24; y++) {
+            Tile? tile = GameSettings.World.CurrentMap.TileAt(x, y);
+
+            if (tile != null) {
+                int printX = GameSettings.World.Player.X - x;
+                int printY = GameSettings.World.Player.Y - y;
+
+                SquareCon.Print(44 + 23 + printX, 23 + printY, tile.GetAppearance());
+            }
+        }
+    }
+
+    SquareCon.Print(44 + 23, 23, GameSettings.World.Player.GetAppearance());
+    </div> 
+
+    <h1>3. Finite -> Infinite</h1>
+    <p> This change should generally be combined with Sparse (unless you have a way to generate the new tiles as they become visible), and Scrolling (as there is no point in an infinite map if you can only ever see the same small chunk). Replace the Tile?[] array with a Dictionary&lt;Point, Tile&gt;. The initialization for it now becomes <b>= new();</b>. Remove the line setting floor spaces to null (or to floors, if you haven't done Sparse before this). Change the assignment of Wall tiles to an Add statement, using X,Y as the key. For the random walls you now need to generate both a random X (max of Width) and Y (max of Height), then place a Wall there if there's not already an entry at that Point. For TileAt, return the Tile at the Point given if it exists in the Dictionary, otherwise return our Default tile (or a new Tile set to whatever you'd like the default to be). New <b>Map</b> code follows.</p>
+
+    <div class="code_block">
+    namespace SadTutorial.Data {
+        public class Map {
+            public Dictionary&lt;Point, Tile&gt; Tiles;
+            public int Width;
+            public int Height;
+
+            public Tile Default;
+
+            public Map(int width, int height, Tile def) {
+                Tiles = new();
+                Width = width;
+                Height = height;
+                Default = def;
+
+                for (int x = 0; x < Width; x++) {
+                    for (int y = 0; y < Height; y++) {
+                        if (x == 0 || y == 0 || x == Width - 1 || y == Height - 1) {
+                            Tiles.Add(new Point(x, y), new Tile("Stone Wall", '#', Color.DimGray, true, true)); 
+                        }
+                    }
+                }
+
+                for (int i = 0; i < 100; i++) {
+                    int x = GameSettings.rand.Next(Width);
+                    int y = GameSettings.rand.Next(Height);
+                    if (Tiles.ContainsKey(new Point(x, y)))
+                        Tiles.Remove(new Point(x, y));
+                    Tiles.Add(new Point(x, y), new Tile("Stone Wall", '#', Color.DimGray, true, true));
+                }
+            }
+
+            public Tile? TileAt(int x, int y) {
+                if (Tiles.ContainsKey(new Point(x, y))) {
+                    return Tiles[new Point(x, y)];
+                }
+                return Default;
+            }
+        }
+    } 
+    </div>
+
+    <h1>4. Tile -> string</h1>
+    <p>Reset to the base Chapter 2 code (or adapt it to the others if you like). In <b>Data/World.cs</b> create a Dictionary called TileLibrary with the key being a string and the value being Tile. In the constructor, add our Wall tile under the name "stoneWall" and our floor tile under the name "stoneFloor". Back in <b>Data/Map.cs</b> replace the Tile[] array with a string[] array. Change the initialization of the array accordingly, replace the assignment operators with assigning the strings "stoneWall" for Wall and "stoneFloor" for Floors. For the random walls change it to assigning "stoneWall". In TileAt, instead of returning Tiles[x + y * Width], check to see if GameSettings.World.TileLibrary contains key Tiles[x + y * Width] and if so, return that entry from the TileLibrary. Now instead of each spot on the map having unique tile data, they reference a central library where any changes affect all instances of the tile. Code follows.</p>
+
+    <div class="code_block">
+    namespace SadTutorial.Data {
+        public class Map {
+            public string[] Tiles;
+            public int Width;
+            public int Height;
+
+            public Map(int width, int height) {
+                Tiles = new string[width * height];
+                Width = width;
+                Height = height; 
+
+                for (int x = 0; x < Width; x++) {
+                    for (int y = 0; y < Height; y++) {
+                        if (x == 0 || y == 0 || x == Width - 1 || y == Height - 1) {
+                            Tiles[x + y * Width] = "stoneWall";
+                        } else {
+                            Tiles[x + y * Width] = "stoneFloor";
+                        }
+                    }
+                }
+
+                for (int i = 0; i < 100; i++) {
+                    Tiles[GameSettings.rand.Next(Tiles.Length)] = "stoneWall";
+                }
+            }
+
+            public Tile? TileAt(int x, int y) {
+                if (x >= 0 && x < Width && y >= 0 && y < Height) {
+                    if (GameSettings.World.TileLibrary.ContainsKey(Tiles[x + y * Width]))
+                        return GameSettings.World.TileLibrary[Tiles[x + y * Height]];
+                }
+                return null;
+            }
+        }
+    } 
+    </div>
+
+    <div class="code_block">
+    namespace SadTutorial.Data {
+        public class World {
+            public Map CurrentMap;
+            public Player Player;
+            public Dictionary<string, Tile> TileLibrary = new();
+
+            public World() {
+                CurrentMap = new(48, 48);
+                Player = new("Player", 5, 5);
+
+                TileLibrary.Add("stoneFloor", new Tile("Stone Floor", '.', Color.DarkGray, false, false));
+                TileLibrary.Add("stoneWall", new Tile("Stone Wall", '#', Color.Gray, true, true));
+            }
+        }
+    } 
+    </div>
+
+    <h1>5. Isometric View</h1>
+    <p>Start with the centralized tile library of the previous section. Create a new file called IsoPixel that is a duplicate of Renderable as it currently exists. Add a second constructor that takes a ColoredGlyph and sets the Glyph to the ColoredGlyphs Glyph, and Foreground to its Foreground. In <b>Data/Renderable.cs</b> itself, add a Dictionary&lt;Point, IsoPixel&gt;. Initialize this in the constructor. Now add the following functions to <b>Renderable</b>, which will allow us to manipulate the Image.</p>
+
+    <div class="code_block">
+    public void SetRow(Point start, ColoredString line) {
+        for (int i = 0; i < line.Length; i++) {
+            Point where = start + new Point(i, 0);
+            if (Image.ContainsKey(where))
+                Image.Remove(where);
+            Image.Add(where, new(line[i]));
+        }
+    }
+
+    public void SetPixel(Point where, ColoredString str) {
+        if (Image.ContainsKey(where))
+            Image.Remove(where);
+        Image.Add(where, new(str[0]));
+    }
+    </div>
+
+    <p>In <b>Data/World.cs</b> change the addition of our Wall to the following, separating the initialization into a separate line so we can set the Image details. The Points are relative to the leftmost pixel of the ground pattern, which is considered 0,0 when drawing the image. Walls are pretty simple, they simply extend up so that the "top" face of the wall matches the ground tile that would be there. </p>
+
+    <div class="code_block">
+    Tile stoneWall = new Tile("Stone Wall", '#', Color.Gray, true, true);
+    stoneWall.SetRow(new Point(5, -10), new ColoredString("#", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(3, -9), new ColoredString("## ##", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(2, -8), new ColoredString("#     ###", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, -7), new ColoredString("###     # #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, -6), new ColoredString("#  ## ##  #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, -5), new ColoredString("#    #    #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, -4), new ColoredString("#    #    #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, -3), new ColoredString("#    #    #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, -2), new ColoredString("#    #    #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, -1), new ColoredString("#    #    #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(0, 0), new ColoredString("##   #   #", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(1, 1), new ColoredString("### # ##", Color.Gray, Color.Black));
+    stoneWall.SetRow(new Point(4, 2), new ColoredString("###", Color.Gray, Color.Black));
+     
+    TileLibrary.Add("stoneWall", stoneWall);
+    </div>
+
+    <p> Finally in <b>UI/UI_GameArea.cs</b>, replace the code in Update with the following code. You may notice that the sidebar line doesn't appear and the tiles being drawn extend over the window lines on the right and bottom. Amended <b>UI/InstantUI.cs</b> code also provided to fix these issues.</p>
+
+    <div class="code_block">
+    Win.Clear();
+    Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+    Con.Clear();
+    SquareCon.Clear();
+    DoubleSquareCon.Clear(); 
+
+    Con.DrawLine(new Point(33, 0), new Point(33, 48), 179);
+
+    Tile? ground;
+    Point tile = new Point(GameSettings.World.Player.X - 3, GameSettings.World.Player.Y - 2);
+
+    for (int y = 8; y > -6; y--) {
+        for (int x = 9; x > -8; x--) {
+            tile = new Point(GameSettings.World.Player.X - x, GameSettings.World.Player.Y - y);
+
+            ground = GameSettings.World.CurrentMap.TileAt(tile.X, tile.Y);
+
+            if (ground != null) {
+                SquareCon.Print((50 - 7 * x) + 7 * y, (20 - 4 * y) - 3 * x, ground.GetAppearance());
+
+
+                SquareCon.Print((48 - 7 * x) + 7 * y, (21 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(5));
+                SquareCon.Print((47 - 7 * x) + 7 * y, (22 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(9));
+                SquareCon.Print((45 - 7 * x) + 7 * y, (23 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(10));
+                SquareCon.Print((46 - 7 * x) + 7 * y, (24 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(7));
+                SquareCon.Print((49 - 7 * x) + 7 * y, (25 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(3));
+
+                foreach (var kv in ground.Image) {
+                    Point thisSpot = kv.Key + new Point((45 - 7 * x) + 7 * y, (23 - 4 * y) - 3 * x);
+
+                    if (thisSpot.X < 92)
+                        SquareCon.Print(thisSpot.X, thisSpot.Y, kv.Value.GetAppearance());
+                }
+            } 
+
+            if (y == 0 && x == 0) {
+                SquareCon.Print(49, 16, "/" + 196.AsString() + "\\", Color.White);
+                SquareCon.Print(48, 17, " " + 179.AsString() + " " + 179.AsString() + "", Color.White);
+                SquareCon.Print(48, 18, " \\_/ ", Color.White);
+                SquareCon.Print(48, 19, " /" + 179.AsString() + "\\ ", Color.White);
+                SquareCon.Print(48, 20, "/ " + 179.AsString() + " \\", Color.White);
+                SquareCon.Print(48, 21, "  " + 179.AsString() + " ", Color.White);
+                SquareCon.Print(49, 22, "/ \\", Color.White);
+                SquareCon.Print(49, 23, "" + 179.AsString() + " " + 179.AsString() + "", Color.White);
+            }
+        }
+    }
+
+    SquareCon.Fill(new Rectangle(0, 0, 20, 80), Color.White, Color.Black, ' ');
+    </div>
+
+    <div class="code_block">
+    using SadConsole.Input;
+    using SadConsole.UI; 
+
+    namespace SadTutorial.UI {
+        public abstract class InstantUI {
+            public Console Con;
+            public Console SquareCon;
+            public Console DoubleSquareCon;
+            public Window Win;
+
+            public InstantUI(int width, int height, string windowTitle = "") {
+                Win = new(width, height);
+                Win.CanDrag = true;
+                Win.Position = new((GameSettings.GameWidth - width) / 2, (GameSettings.GameHeight - height) / 2);
+
+                Con = new(width - 2, height - 2);
+                Con.Position = new(1, 1);
+                Win.Title = windowTitle.Align(HorizontalAlignment.Center, width - 2, (char)196);
+
+                SquareCon = new Console(new CellSurface((width / 12) * 7 + 1, height - 2), GameSettings.SquareFont);
+                SquareCon.UsePixelPositioning = true;
+                SquareCon.Position = new(7, 12);
+
+                DoubleSquareCon = new Console(new CellSurface(width / 2, height / 2), GameSettings.SquareFont, new Point(24, 24));
+                DoubleSquareCon.UsePixelPositioning = true;
+                DoubleSquareCon.Position = new Point(7, 12);
+                 
+                Win.Children.Add(SquareCon);
+                Win.Children.Add(DoubleSquareCon);
+                Win.Children.Add(Con);
+                GameSettings.UIManager.Children.Add(Win);
+
+                Win.Show();
+                Win.IsVisible = false;
+            }
+
+
+            public virtual void Update() {
+                Con.Clear();
+            }
+
+            public virtual void Input() {
+                Point mousePos = new MouseScreenObjectState(Con, GameHost.Instance.Mouse).CellPosition;
+            } 
+        }
+    } 
+    </div>
+
+    <p>The update code is a bit complicated, so I'll try to explain it. The for-loops are incremented in such a way that the farthest back tiles are drawn first, so that the tiles "closer" to the camera overlay them, adding to the illusion of depth. The numbers to print the ground tiles at are essentially magic numbers to make sure that they're drawing at the right positions, rotating the map 45 degrees in the process. I wish I could explain this part better, but I stumbled onto the correct solution without really understanding the math behind why these numbers work. After drawing the ground tile (which is just the tile we previously used as the map tile repeated in the specified pattern), we draw any pixels the Image has attached relative to the leftmost pixel of the ground tile. Finally when the for-loops reach 0,0, we draw the silly player image in the middle of our screen, so that future loops will draw over them and complete the sense of depth.</p>
+    <p>If all went according to plan, you should see something like the following image!</p>
+    <img src="../resources/Images/isometricMap.png">
+    
+    <h1>4. Conclusion</h1>
+    <p> That's all the map alternatives I can think of at the moment, so hopefully one of them suits your needs. If you can think of another map style to cover let me know in the discord and I'll work it out and add it to this page. The final code for this chapter will be the isometric view because it is the largest change from the base code, and the altered files for it are provided below.</p>
+ 
+    <button type="button" class="collapsible">Data/Renderable.cs</button>
+    <div class="hidden_block"> 
+    using SadAdditions;
+
+    namespace SadTutorial.Data {
+        public class Renderable { 
+            public int Glyph;
+            public Color Foreground;
+
+            public Dictionary&lt;Point, IsoPixel&gt; Image;
+
+            public Renderable(int g, Color c) { 
+                Glyph = g;
+                Foreground = c;
+                Image = new();
+            }
+
+            public ColoredString GetAppearance() {
+                return new ColoredString(Glyph.AsString(), Foreground, Color.Black);
+            }
+
+            public void SetRow(Point start, ColoredString line) {
+                for (int i = 0; i < line.Length; i++) {
+                    Point where = start + new Point(i, 0);
+                    if (Image.ContainsKey(where))
+                        Image.Remove(where);
+                    Image.Add(where, new(line[i]));
+                }
+            }
+
+            public void SetPixel(Point where, ColoredString str) {
+                if (Image.ContainsKey(where))
+                    Image.Remove(where);
+                Image.Add(where, new(str[0]));
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/IsoPixel.cs</button>
+    <div class="hidden_block"> 
+    using SadAdditions;
+
+    namespace SadTutorial.Data {
+        public class IsoPixel {
+            public int Glyph = 0;
+            public Color Foreground = Color.White;
+
+            public IsoPixel(int glyph, Color fore) {
+                Glyph = glyph;  
+                Foreground = fore;
+            }
+
+            public IsoPixel(ColoredGlyph col) {
+                Glyph = col.Glyph;
+                Foreground = col.Foreground;
+            }
+
+            public ColoredString GetAppearance() {
+                return new ColoredString(Glyph.AsString(), Foreground, Color.Black);
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Map.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Map {
+            public string[] Tiles;
+            public int Width;
+            public int Height;
+
+            public Map(int width, int height) {
+                Tiles = new string[width * height];
+                Width = width;
+                Height = height; 
+
+                for (int x = 0; x < Width; x++) {
+                    for (int y = 0; y < Height; y++) {
+                        if (x == 0 || y == 0 || x == Width - 1 || y == Height - 1) {
+                            Tiles[x + y * Width] = "stoneWall";
+                        } else {
+                            Tiles[x + y * Width] = "stoneFloor";
+                        }
+                    }
+                }
+
+                for (int i = 0; i < 100; i++) {
+                    Tiles[GameSettings.rand.Next(Tiles.Length)] = "stoneWall";
+                }
+            }
+
+            public Tile? TileAt(int x, int y) {
+                if (x >= 0 && x < Width && y >= 0 && y < Height) {
+                    if (GameSettings.World.TileLibrary.ContainsKey(Tiles[x + y * Width]))
+                        return GameSettings.World.TileLibrary[Tiles[x + y * Height]];
+                }
+                return null;
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/World.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class World {
+            public Map CurrentMap;
+            public Player Player;
+            public Dictionary&lt;string, Tile&gt; TileLibrary = new();
+
+            public World() {
+                CurrentMap = new(48, 48);
+                Player = new("Player", 6, 6);
+
+                TileLibrary.Add("stoneFloor", new Tile("Stone Floor", '.', Color.DarkGray, false, false));
+
+                Tile stoneWall = new Tile("Stone Wall", '#', Color.Gray, true, true);
+                stoneWall.SetRow(new Point(5, -10), new ColoredString("#", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(3, -9), new ColoredString("## ##", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(2, -8), new ColoredString("#     ###", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, -7), new ColoredString("###     # #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, -6), new ColoredString("#  ## ##  #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, -5), new ColoredString("#    #    #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, -4), new ColoredString("#    #    #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, -3), new ColoredString("#    #    #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, -2), new ColoredString("#    #    #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, -1), new ColoredString("#    #    #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(0, 0), new ColoredString("##   #   #", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(1, 1), new ColoredString("### # ##", Color.Gray, Color.Black));
+                stoneWall.SetRow(new Point(4, 2), new ColoredString("###", Color.Gray, Color.Black));
+                 
+                TileLibrary.Add("stoneWall", stoneWall);
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/World.cs</button>
+    <div class="hidden_block"> 
+    using SadAdditions; 
+    using SadConsole.Input;
+    using SadTutorial.Data;
+
+    namespace SadTutorial.UI {
+        public class UI_GameArea : InstantUI {  
+            public UI_GameArea(int width, int height) : base(width, height, "") {
+                Win.IsVisible = true;
+                Win.Position = new Point(0, 0);
+                Win.CanDrag = false;
+            }
+
+            public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+                Con.Clear();
+                SquareCon.Clear();
+                DoubleSquareCon.Clear(); 
+
+                Con.DrawLine(new Point(33, 0), new Point(33, 48), 179);
+
+                Tile? ground;
+                Point tile = new Point(GameSettings.World.Player.X - 3, GameSettings.World.Player.Y - 2);
+
+                for (int y = 8; y > -6; y--) {
+                    for (int x = 9; x > -8; x--) {
+                        tile = new Point(GameSettings.World.Player.X - x, GameSettings.World.Player.Y - y);
+
+                        ground = GameSettings.World.CurrentMap.TileAt(tile.X, tile.Y);
+
+                        if (ground != null) {
+                            SquareCon.Print((50 - 7 * x) + 7 * y, (20 - 4 * y) - 3 * x, ground.GetAppearance());
+
+
+                            SquareCon.Print((48 - 7 * x) + 7 * y, (21 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(5));
+                            SquareCon.Print((47 - 7 * x) + 7 * y, (22 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(9));
+                            SquareCon.Print((45 - 7 * x) + 7 * y, (23 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(10));
+                            SquareCon.Print((46 - 7 * x) + 7 * y, (24 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(7));
+                            SquareCon.Print((49 - 7 * x) + 7 * y, (25 - 4 * y) - 3 * x, ground.GetAppearance().Repeat(3));
+
+                            foreach (var kv in ground.Image) {
+                                Point thisSpot = kv.Key + new Point((45 - 7 * x) + 7 * y, (23 - 4 * y) - 3 * x);
+
+                                if (thisSpot.X < 92)
+                                    SquareCon.Print(thisSpot.X, thisSpot.Y, kv.Value.GetAppearance());
+                            }
+                        } 
+
+                        if (y == 0 && x == 0) {
+                            SquareCon.Print(49, 16, "/" + 196.AsString() + "\\", Color.White);
+                            SquareCon.Print(48, 17, " " + 179.AsString() + " " + 179.AsString() + "", Color.White);
+                            SquareCon.Print(48, 18, " \\_/ ", Color.White);
+                            SquareCon.Print(48, 19, " /" + 179.AsString() + "\\ ", Color.White);
+                            SquareCon.Print(48, 20, "/ " + 179.AsString() + " \\", Color.White);
+                            SquareCon.Print(48, 21, "  " + 179.AsString() + " ", Color.White);
+                            SquareCon.Print(49, 22, "/ \\", Color.White);
+                            SquareCon.Print(49, 23, "" + 179.AsString() + " " + 179.AsString() + "", Color.White);
+                        }
+                    }
+                }
+
+                SquareCon.Fill(new Rectangle(0, 0, 20, 80), Color.White, Color.Black, ' ');
+
+            }
+
+            public override void Input() {
+                int dx = 0;
+                int dy = 0;
+                if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+                if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+                if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+                if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+                if (dx != 0 || dy != 0) {
+                    Tile? dest = GameSettings.World.CurrentMap.TileAt(GameSettings.World.Player.X + dx, GameSettings.World.Player.Y + dy);
+
+                    if (dest != null && !dest.BlocksMove) {
+                        GameSettings.World.Player.X += dx;
+                        GameSettings.World.Player.Y += dy;
+                    }
+                }
+            }  
+        }
+    } 
+    </div>
+
+    <p> 
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>
