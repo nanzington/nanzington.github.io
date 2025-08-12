@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Core 03 - Monsters and Combat</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>To make up for the last chapter being less than 30 lines total of code, let's have a nice long chapter this time! We'll be covering creating monsters, moving them towards the player if they can see you, and basic bump-based combat. </p>
+
+    <h1>1. Preparations</h1>
+    <p>First thing we need to do is, now that we'll have more than just the player moving, centralizing our movement code. In <b>Actor</b> create a function called TryMove(int dx, int dy), and move the code that previously ran if dx/dy weren't zero from <b>UI/UI_GameArea/Input()</b> into the new function. Replace instances of Player.X and Player.Y with simply X and Y since we're in the entity being moved. In <b>UI_GameArea</b> you should now have the KeyPressed setting the dy and dx, the check to see if they aren't zero, and then inside that check a call to Player.TryMove(dx,dy) and the UpdateFOV line. Running the project should result in identical functionality to how it was before these changes.</p>
+
+    <p>Next, add three variables to <b>Actor</b>. An int for Current HP, and int for Max HP, and a string for Damage Dice. Rather than add these to the constructor, create a separate SetStats function to set them. Eventually we'll have more stats as necessary, but this is enough to get us started. Over in <b>Map</b> create a List&lt;Actor&gt; to hold the Monsters present in the map. Back in <b>Actor</b> we'll now utilize this list by creating a TakeDamage(int) function. Reduce the actors HP by the passed int, then if their Current HP is at or below zero, check to see if it's a Player or not. This is a slightly lesser known trick, so I'll post the code after this paragraph. For now we won't do anything if it's the player, but if it's <em>not</em> the player then we'll remove it from the monster list.</p>
+
+    <div class="code_block">
+    public void TakeDamage(int amt) {
+        CurrentHP -= amt;
+        if (CurrentHP <= 0) {
+            if (this is Player) {
+
+            } else {
+                GameSettings.World.CurrentMap.Monsters.Remove(this);
+            }
+        }
+    }
+    </div>
+
+    <h1>2. Placing Enemies</h1>
+
+    <p> Now that we have the structures to handle combat, let's go create some enemies... In a moment. First, in <b>Map</b> create a function below TileAt called ActorAt, taking x and y coordinates as parameters. Iterate through the Monsters list to see if any has matching coordinates and return it if so. If there are no matches, see if the Player has matching coordinates and return them if so. Otherwise return null. Next in <b>Map</b> create a function called PlaceMonsters and place a for-loop with a nested while-loop in it. The for-loop should run 30 times, while the while-loop rerolls the coordinates to spawn the monster at until it lands on a tile without a wall and without a monster already present there. Monsters will simply be goblins with 5 hp and 1d2-1 damage. Code follows. </p>
+
+    <div class="code_block">
+    public void PlaceMonsters() {
+        for (int i = 0; i < 30; i++) {
+            int x = GameSettings.rand.Next(Width);
+            int y = GameSettings.rand.Next(Height);
+
+            while (TileAt(x, y) == null || TileAt(x, y).BlocksMove || ActorAt(x, y) != null) {
+                x = GameSettings.rand.Next(Width);
+                y = GameSettings.rand.Next(Height);
+            }
+
+            Actor goblin = new("Goblin", 'g', Color.LimeGreen, x, y);
+            goblin.SetStats(5, "1d2-1");
+
+            Monsters.Add(goblin);
+        }
+    }
+    </div>
+
+    <p> Because ActorAt wants to check the World for things that don't exist until after it's done being initialized, go to <b>Program.cs</b>, our best option for where to place it simply, and add a line under <b>GameSettings.UIManager.Init();</b> calling PlaceMonsters. Now that they're actually placed, they're currently invisible because we haven't told the game to render them yet. Go to <b>UI_GameArea</b> and add a foreach loop iterating through the Monsters list and drawing them if they're in the player's current FOV. Now when you run the game, you should see a bunch of green 'g's scattered around the map! One step closer to goblin murder! Before we get to the next step let's fix a problem we forgot about until now, and in the <b>World</b> constructor set the Players stats to 10 hp and 1d6 damage.</p>
+
+    <h1>3. Dealing Damage</h1>
+    <p> Back in <b>Actor</b> we need to alter the TryMove function. After checking to see if the destination isn't null and doesn't block movement, add a check to see if there's an actor already at that location. If there is, deal damage to it using <b>GoRogue.DiceNotation.Dice.Roll</b> with our Damage Dice variable. Altered code follows.</p>
+
+    <div class="code_block">
+    public void TryMove(int dx, int dy) {
+        Tile? dest = GameSettings.World.CurrentMap.TileAt(X + dx, Y + dy);
+        Actor? blocker = GameSettings.World.CurrentMap.ActorAt(X + dx, Y + dy);
+
+        if (dest != null && !dest.BlocksMove) {
+            if (blocker != null) {
+                blocker.TakeDamage(GoRogue.DiceNotation.Dice.Roll(DamageDice));
+            }
+            else {
+                X += dx;
+                Y += dy;
+            }
+        }
+    }
+    </div>
+
+    <p>Now if you run the project, you should be able to "bump" into the goblins and have them disappear after two or three hits. Murder achieved! Additionally they can fight back theoretically, but since they can't currently move they'll never actually try. So let's fix that!
+
+    <h1>4. Moving Monsters</h1>
+    <p>We've got all the pieces required for this in place, so let's go to <b>UI_GameArea</b> and finish it. In Input, after the player TryMove but before updating the FOV, add a foreach to iterate through the monsters on the map. If they're in the current FOV, get the Line from their position the player's, then move them to the first index of the line (it includes the start and end points, so the first index is the actual step they need to take). Because TryMove can result in the Monsters list being changed, take note of the count beforehand and break the foreach loop if it changes. This was all a little hard to explain, so here's the code for our updated Input function:</p>
+
+    <div class="code_block">
+    public override void Input() {
+        int dx = 0;
+        int dy = 0;
+        if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+        if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+        if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+        if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+        if (dx != 0 || dy != 0) {
+            GameSettings.World.Player.TryMove(dx, dy);
+
+            Point step;
+            int monCount = GameSettings.World.CurrentMap.Monsters.Count;
+            foreach (var mon in GameSettings.World.CurrentMap.Monsters) { 
+                if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                    step = Lines.GetLine(new Point(mon.X, mon.Y), new Point(GameSettings.World.Player.X, GameSettings.World.Player.Y)).ToList()[1];
+                    mon.TryMove(step.X - mon.X, step.Y - mon.Y);
+                }
+
+                if (monCount != GameSettings.World.CurrentMap.Monsters.Count)
+                    break;
+            }
+
+            GameSettings.World.UpdateFOV(); 
+        }
+    }
+    </div>
+ 
+    <h1>5. Conclusion</h1>
+    <p> If you've followed all the steps, and I didn't forget anything, then you should now be able to move around your map, and any goblins that see you will move towards you. If they're next to you they should hit you (though we aren't tracking a way to see that yet), and you can bump into them to damage them (which we <em>can</em> see, because they'll disappear when they die). The basics of monsters and combat are created! Code of the main files modified is provided below, and of course all the files will be available in the github repository resources folder.</p>
+      
+    <button type="button" class="collapsible">Data/Map.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Map {
+            public Tile[] Tiles;
+            public int Width;
+            public int Height;
+
+            public List<Actor> Monsters = new();
+
+            public Map(int width, int height) {
+                Tiles = new Tile[width * height];
+                Width = width;
+                Height = height;
+
+                for (int x = 0; x < Width; x++) {
+                    for (int y = 0; y < Height; y++) {
+                        if (x == 0 || y == 0 || x == Width - 1 || y == Height - 1) {
+                            Tiles[x + y * Width] = new Tile("Stone Wall", '#', Color.DimGray, true, true); 
+                        } else {
+                            Tiles[x + y * Width] = new Tile("Stone Floor", '.', Color.DarkGray, false, false);
+                        }
+                    }
+                }
+
+                for (int i = 0; i < 100; i++) {
+                    Tiles[GameSettings.rand.Next(Tiles.Length)] = new Tile("Stone Wall", '#', Color.DimGray, true, true);
+                }
+            }
+
+            public Tile? TileAt(int x, int y) {
+                if (x >= 0 && x < Width && y >= 0 && y < Height) {
+                    return Tiles[x + y * Width];
+                }
+                return null;
+            }
+
+            public Actor? ActorAt(int x, int y) {
+                foreach (var mon in Monsters) {
+                    if (mon.X == x && mon.Y == y) return mon;
+                }
+                 
+                if (GameSettings.World.Player.X == x && GameSettings.World.Player.Y == y) return GameSettings.World.Player; 
+
+                return null;
+            }
+
+            public void PlaceMonsters() {
+                for (int i = 0; i < 30; i++) {
+                    int x = GameSettings.rand.Next(Width);
+                    int y = GameSettings.rand.Next(Height);
+
+                    while (TileAt(x, y) == null || TileAt(x, y).BlocksMove || ActorAt(x, y) != null) {
+                        x = GameSettings.rand.Next(Width);
+                        y = GameSettings.rand.Next(Height);
+                    }
+
+                    Actor goblin = new("Goblin", 'g', Color.LimeGreen, x, y);
+                    goblin.SetStats(5, "1d2-1");
+
+                    Monsters.Add(goblin);
+                }
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Actor.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Actor : Entity {
+            public int CurrentHP = 0;
+            public int MaxHP = 0;
+
+            public string DamageDice = "";
+
+            public Actor(string name, int glyph, Color col, int x, int y) : base(name, glyph, col, x, y) { 
+            }
+
+
+            public void TryMove(int dx, int dy) {
+                Tile? dest = GameSettings.World.CurrentMap.TileAt(X + dx, Y + dy);
+                Actor? blocker = GameSettings.World.CurrentMap.ActorAt(X + dx, Y + dy);
+
+                if (dest != null && !dest.BlocksMove) {
+                    if (blocker != null) {
+                        blocker.TakeDamage(GoRogue.DiceNotation.Dice.Roll(DamageDice));
+                    }
+                    else {
+                        X += dx;
+                        Y += dy;
+                    }
+                }
+            }
+
+            public void SetStats(int hp, string dmg) {
+                MaxHP = hp;
+                CurrentHP = hp;
+
+                DamageDice = dmg;
+            }
+
+            public void TakeDamage(int amt) {
+                CurrentHP -= amt;
+                if (CurrentHP <= 0) {
+                    if (this is Player) {
+
+                    } else {
+                        GameSettings.World.CurrentMap.Monsters.Remove(this);
+                    }
+                }
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">UI/UI_GameArea.cs</button>
+    <div class="hidden_block"> 
+    using GoRogue.MapViews;
+    using SadAdditions; 
+    using SadConsole.Input;
+    using SadTutorial.Data;
+
+    namespace SadTutorial.UI {
+        public class UI_GameArea : InstantUI { 
+            public UI_GameArea(int width, int height) : base(width, height, "") {
+                Win.IsVisible = true;
+                Win.Position = new Point(0, 0);
+                Win.CanDrag = false;
+            }
+
+            public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+                Con.Clear();
+                SquareCon.Clear();
+                DoubleSquareCon.Clear(); 
+
+                Con.DrawLine(new Point(74, 0), new Point(74, 48), 179);
+
+                for (int x = 0; x < GameSettings.World.CurrentMap.Width; x++) {
+                    for (int y = 0; y < GameSettings.World.CurrentMap.Height; y++) {
+                        Tile tile = GameSettings.World.CurrentMap.TileAt(x, y);
+
+                        if (tile != null) {
+                            if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(44 + x, y, tile.GetAppearance());
+                            else if (GameSettings.World.SeenTiles.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(44 + x, y, tile.GetAppearance().GetDarker().GetDarker()); 
+                        }
+                    }
+                }
+
+                foreach (var mon in GameSettings.World.CurrentMap.Monsters) {
+                    if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                        SquareCon.Print(44 + mon.X, mon.Y, mon.GetAppearance());
+                    }
+                }
+
+                SquareCon.Print(44 + GameSettings.World.Player.X, GameSettings.World.Player.Y, GameSettings.World.Player.GetAppearance());
+            }
+
+            public override void Input() {
+                int dx = 0;
+                int dy = 0;
+                if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+                if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+                if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+                if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+                if (dx != 0 || dy != 0) {
+                    GameSettings.World.Player.TryMove(dx, dy);
+
+                    Point step;
+                    int monCount = GameSettings.World.CurrentMap.Monsters.Count;
+                    foreach (var mon in GameSettings.World.CurrentMap.Monsters) { 
+                        if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                            step = Lines.GetLine(new Point(mon.X, mon.Y), new Point(GameSettings.World.Player.X, GameSettings.World.Player.Y)).ToList()[1];
+                            mon.TryMove(step.X - mon.X, step.Y - mon.Y);
+                        }
+
+                        if (monCount != GameSettings.World.CurrentMap.Monsters.Count)
+                            break;
+                    }
+
+                    GameSettings.World.UpdateFOV(); 
+                }
+            }  
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/World.cs</button>
+    <div class="hidden_block"> 
+    using GoRogue;
+    using GoRogue.MapViews;
+
+    namespace SadTutorial.Data {
+        public class World {
+            public Map CurrentMap;
+            public Player Player;
+
+            public FOV PlayerFOV;
+            public LambdaMapView<bool> MapView;
+            public List<Coord> SeenTiles = new();
+
+            public World() { 
+                CurrentMap = new(48, 48);
+                Player = new("Player", 5, 5);
+                Player.SetStats(10, "1d6");
+
+                ResetFOV();
+                UpdateFOV();
+            }
+
+            public void ResetFOV() {
+                MapView = new(CurrentMap.Width, CurrentMap.Height, (pos) => {
+                    Tile? tile = CurrentMap.TileAt(pos.X, pos.Y);
+
+                    if (tile != null) {
+                        return !tile.BlocksLOS;
+                    }
+                    return true;
+                });
+
+                PlayerFOV = new(MapView);
+                SeenTiles.Clear();
+            }
+
+            public void UpdateFOV() {  
+                PlayerFOV.Calculate(Player.X, Player.Y, 10);
+
+                foreach (var point in PlayerFOV.NewlyUnseen) {
+                    SeenTiles.Add(point);
+                }
+            }
+        }
+    } 
+    </div>
+ 
+    <p>
+    <a href="./02.html">Chapter 03: Field of View</a>
+    <br> 
+    <a href="./04.html">Chapter 05: TBD</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>

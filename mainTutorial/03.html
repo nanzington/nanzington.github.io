@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Core 03 - Field of View</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>In this brief chapter we're going to set up a field of view system, so that the player can only seen what is immediately around their character instead of the whole map at once. Before we get started, go to the NuGet package manager (Tools -&gt; NuGet Package Manager -&gt; Manage NuGet Packages for Solution), go to Install, and search for GoRogue by Chris3606 and install the latest stable build. This library has a bunch of useful functions for making roguelikes, so we'll be using it quite a bit in the future. Now that you have GoRogue installed, setting up the FOV requires surprisingly little code, so let's jump right into it.</p>
+ 
+    <h1>1. Making the FOV</h1>
+    <p> In <b>Data/World.cs</b> create three new variables: a GoRogue.FOV, a GoRogue.MapViews.LambdaMapView&lt;bool&gt;, and a List&lt;Coord&gt;. The first handles all the FOV calculations, the second stores our map as a bool array stating whether each tile allows vision to pass through it, and the third will be our view history. Next up create a function called ResetFOV(). The way we initialize the lambda function is a little complicated so I'll put the code here.</p>
+    <div class="code_block">
+    public void ResetFOV() {
+        MapView = new(CurrentMap.Width, CurrentMap.Height, (pos) => {
+            Tile? tile = CurrentMap.TileAt(pos.X, pos.Y);
+
+            if (tile != null) {
+                return !tile.BlocksLOS;
+            }
+            return true;
+        });
+
+        PlayerFOV = new(MapView);
+        SeenTiles.Clear();
+    }
+    </div>
+    <p>To create the MapView we pass in our maps width and height, and we create a lamba function accepting a Coord. Inside the function body we check to see if there's a tile at the requested position (pos), and if so return the opposite of BlocksLOS, because it wants to know if vision is allowed rather than forbidden. Finally we initialize the FOV by passing in the MapView, and we clear the vision history. Next up create a function called UpdateFOV(). In it, run PlayerFOV.Calculate, passing in your players position and the desired vision radius, and iterate through PlayerFOV.NewlyUnseen, adding them all to SeenTiles. Finally throw a call to ResetFOV and then UpdateFOV at the end of the World constructor and we're done with this file.</p>
+
+    <h1>2. Seeing the FOV</h1>
+    <p>This change is even easier than the changes to World! In <b>UI/UI_GameArea.cs</b>, in the for-loops where your tiles are printed to SquareCon, after checking to make sure the tile isn't null before printing it check to see if PlayerFOV.CurrentFOV contains a new Coord with the x and y of the tile. If it does contain it, print the tile. If it doesn't, check to see if SeenTiles contains the coord instead, and if it does print the tile using GetAppearance().GetDarker().GetDarker(). You can do only one call to GetDarker if you like, but the double makes the difference between remembered tiles and currently seen tiles more obvious. All that's left to do is put a call to UpdateFOV somewhere. If you don't care about the cost of calculating it every frame you can throw it anywhere in the Update of UI_GameArea, otherwise stick it in Input after successfully moving the player. 
+
+    <h1>4. Conclusion</h1>
+    <p> If you've followed all the steps, and I didn't forget anything, then you should now see something similar to the following after moving around a bit!</p>
+    <img src="../resources/Images/fieldOfView.png">
+      
+    <button type="button" class="collapsible">Data/World.cs</button>
+    <div class="hidden_block"> 
+    using GoRogue;
+    using GoRogue.MapViews;
+
+    namespace SadTutorial.Data {
+        public class World {
+            public Map CurrentMap;
+            public Player Player;
+
+            public FOV PlayerFOV;
+            public LambdaMapView<bool> MapView;
+            public List<Coord> SeenTiles = new();
+
+            public World() {
+                CurrentMap = new(48, 48);
+                Player = new("Player", 5, 5);
+
+                ResetFOV();
+                UpdateFOV();
+            }
+
+            public void ResetFOV() {
+                MapView = new(CurrentMap.Width, CurrentMap.Height, (pos) => {
+                    Tile? tile = CurrentMap.TileAt(pos.X, pos.Y);
+
+                    if (tile != null) {
+                        return !tile.BlocksLOS;
+                    }
+                    return true;
+                });
+
+                PlayerFOV = new(MapView);
+                SeenTiles.Clear();
+            }
+
+            public void UpdateFOV() {  
+                PlayerFOV.Calculate(Player.X, Player.Y, 10);
+
+                foreach (var point in PlayerFOV.NewlyUnseen) {
+                    SeenTiles.Add(point);
+                }
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">UI/UI_GameArea.cs</button>
+    <div class="hidden_block"> 
+    using GoRogue.MapViews;
+    using SadAdditions; 
+    using SadConsole.Input;
+    using SadTutorial.Data;
+
+    namespace SadTutorial.UI {
+        public class UI_GameArea : InstantUI { 
+            public UI_GameArea(int width, int height) : base(width, height, "") {
+                Win.IsVisible = true;
+                Win.Position = new Point(0, 0);
+                Win.CanDrag = false;
+            }
+
+            public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+                Con.Clear();
+                SquareCon.Clear();
+                DoubleSquareCon.Clear(); 
+
+                Con.DrawLine(new Point(74, 0), new Point(74, 48), 179);
+
+                for (int x = 0; x < GameSettings.World.CurrentMap.Width; x++) {
+                    for (int y = 0; y < GameSettings.World.CurrentMap.Height; y++) {
+                        Tile tile = GameSettings.World.CurrentMap.TileAt(x, y);
+
+                        if (tile != null) {
+                            if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(44 + x, y, tile.GetAppearance());
+                            else if (GameSettings.World.SeenTiles.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(44 + x, y, tile.GetAppearance().GetDarker().GetDarker()); 
+                        }
+                    }
+                }
+
+                SquareCon.Print(44 + GameSettings.World.Player.X, GameSettings.World.Player.Y, GameSettings.World.Player.GetAppearance());
+            }
+
+            public override void Input() {
+                int dx = 0;
+                int dy = 0;
+                if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+                if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+                if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+                if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+                if (dx != 0 || dy != 0) {
+                    Tile? dest = GameSettings.World.CurrentMap.TileAt(GameSettings.World.Player.X + dx, GameSettings.World.Player.Y + dy);
+
+                    if (dest != null && !dest.BlocksMove) {
+                        GameSettings.World.Player.X += dx;
+                        GameSettings.World.Player.Y += dy;
+                         
+                        GameSettings.World.UpdateFOV();
+                    }
+                }
+            }  
+        }
+    } 
+    </div>
+ 
+    <p>
+    <a href="./02.html">Chapter 02: Maps and Actors</a>
+    <br> 
+    <a href="./04.html">Chapter 04: Monsters and Combat</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>
