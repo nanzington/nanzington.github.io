@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Core 05 - User Interface</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>In this chapter we'll be covering the User Interface, including a stats readout for the player and a message log. </p>
+
+    <h1>1. Changing the Map Size</h1>
+    <p>The current division of map to sidebar space leaves a ridiculous amount of space for the sidebar, so let's adjust the map size. In <b>World</b> change the map initializer to 60,48, then in <b>UI_GameArea</b> change the map print offsets to 32 instead of 44. Our line before the map can be moved to X 54 to fit the new area. </p>
+
+    <h1>2. Delineating the Sidebar</h1>
+    <p> In <b>UI_GameArea</b> draw a line a horizontal line (196 for the glyph) at Y 5 and 35 across our sidebar area (to X 53). In the top section we'll take this opportunity to print the Player's health status, referencing their current health and max health variables.</p>
+
+    <h1>3. Message Log</h1>
+    <p>Create a List&lt;ColoredString&gt; in <b>UI_GameArea</b>. Create two functions: AddMessage(string) and AddMessage(ColoredString). The regular string should feed into the ColoredString one by making a new ColoredString out of the string, and the ColoredString version should Insert the passed message into our Log List at index 0. Finally go back to your sidebar printing area in Update, and iterate through the first 15 entries in the Log, printing them in the bottom section of the sidebar.</p>
+
+    <h1>4. Things to Log</h1>
+    <p> In <b>Actor</b> add an Actor parameter to TakeDamage for the attacker (altering the call to it in TryMove by passing <b>this</b> in). After subtracting the damage dealt, call the AddMessage function we just made and log that the attacker hit the defender and for how much. Additionally add a message that says they died, if their HP falls below zero. Now we have basic logging to go with our combat!</p>
+
+    <h1>5. Conclusion</h1>
+    <p> Not a whole lot going on in this chapter, but we'll use these principles to handle logging and the interface in general in future chapters quite often. </p>
+
+    <button type="button" class="collapsible">Data/Actor.cs</button>
+    <div class="hidden_block"> 
+    namespace SadTutorial.Data {
+        public class Actor : Entity {
+            public int CurrentHP = 0;
+            public int MaxHP = 0;
+
+            public string DamageDice = "";
+
+            public Actor(string name, int glyph, Color col, int x, int y) : base(name, glyph, col, x, y) { 
+            }
+
+
+            public void TryMove(int dx, int dy) {
+                Tile? dest = GameSettings.World.CurrentMap.TileAt(X + dx, Y + dy);
+                Actor? blocker = GameSettings.World.CurrentMap.ActorAt(X + dx, Y + dy);
+
+                if (dest != null && !dest.BlocksMove) {
+                    if (blocker != null) {
+                        blocker.TakeDamage(GoRogue.DiceNotation.Dice.Roll(DamageDice), this);
+                    }
+                    else {
+                        X += dx;
+                        Y += dy;
+                    }
+                }
+            }
+
+            public void SetStats(int hp, string dmg) {
+                MaxHP = hp;
+                CurrentHP = hp;
+
+                DamageDice = dmg;
+            }
+
+            public void TakeDamage(int amt, Actor attacker) {
+                CurrentHP -= amt;
+
+                GameSettings.UIManager.GameArea.AddMessage(attacker.Name + " hit " + Name + " for " + amt + " damage.");
+
+                if (CurrentHP <= 0) {
+                    if (this is Player) {
+
+                    } else {
+                        GameSettings.World.CurrentMap.Monsters.Remove(this); 
+                        GameSettings.UIManager.GameArea.AddMessage(new ColoredString(Name + " died!", Color.Crimson, Color.Black));
+                    }
+                }
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">UI/UI_GameArea.cs</button>
+    <div class="hidden_block"> 
+     using GoRogue.MapViews;
+    using SadAdditions; 
+    using SadConsole.Input;
+    using SadTutorial.Data;
+
+    namespace SadTutorial.UI {
+        public class UI_GameArea : InstantUI {
+            public List<ColoredString> MessageLog = new();
+
+            public UI_GameArea(int width, int height) : base(width, height, "") {
+                Win.IsVisible = true;
+                Win.Position = new Point(0, 0);
+                Win.CanDrag = false;
+            }
+
+            public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+                Con.Clear();
+                SquareCon.Clear();
+                DoubleSquareCon.Clear();
+
+                // Sidebar
+                Con.Print(1, 0, "Health: " + GameSettings.World.Player.CurrentHP + "/" + GameSettings.World.Player.MaxHP, Color.Crimson);
+
+                Con.DrawLine(new Point(0, 5), new Point(53, 5), 196);
+
+                Con.DrawLine(new Point(0, 35), new Point(53, 35), 196);
+
+                for (int i = 0; i < MessageLog.Count && i < 15; i++) {
+                    Con.Print(0, 36 + i, MessageLog[i]);
+                }
+
+                // End Sidebar
+
+                Con.DrawLine(new Point(54, 0), new Point(54, 48), 179);
+
+                for (int x = 0; x < GameSettings.World.CurrentMap.Width; x++) {
+                    for (int y = 0; y < GameSettings.World.CurrentMap.Height; y++) {
+                        Tile tile = GameSettings.World.CurrentMap.TileAt(x, y);
+
+                        if (tile != null) {
+                            if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(32 + x, y, tile.GetAppearance());
+                            else if (GameSettings.World.SeenTiles.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(32 + x, y, tile.GetAppearance().GetDarker().GetDarker()); 
+                        }
+                    }
+                }
+
+                foreach (var mon in GameSettings.World.CurrentMap.Monsters) {
+                    if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                        SquareCon.Print(32 + mon.X, mon.Y, mon.GetAppearance());
+                    }
+                }
+
+                SquareCon.Print(30 + GameSettings.World.Player.X, GameSettings.World.Player.Y, GameSettings.World.Player.GetAppearance());
+            }
+
+            public override void Input() {
+                int dx = 0;
+                int dy = 0;
+                if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+                if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+                if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+                if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+                if (dx != 0 || dy != 0) {
+                    GameSettings.World.Player.TryMove(dx, dy);
+
+                    Point step;
+                    int monCount = GameSettings.World.CurrentMap.Monsters.Count;
+                    foreach (var mon in GameSettings.World.CurrentMap.Monsters) { 
+                        if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                            step = Lines.GetLine(new Point(mon.X, mon.Y), new Point(GameSettings.World.Player.X, GameSettings.World.Player.Y)).ToList()[1];
+                            mon.TryMove(step.X - mon.X, step.Y - mon.Y);
+                        }
+
+                        if (monCount != GameSettings.World.CurrentMap.Monsters.Count)
+                            break;
+                    }
+
+                    GameSettings.World.UpdateFOV(); 
+                }
+            }  
+
+            public void AddMessage(string str) {
+                AddMessage(new ColoredString(str));
+            }
+
+            public void AddMessage(ColoredString str) {
+                MessageLog.Insert(0, str);
+            }
+        }
+    } 
+    </div>
+ 
+    <p>
+    <a href="./04.html">Chapter 04: Monsters and Combat</a>
+    <br> 
+    <a href="./06.html">Chapter 06: A Better Map</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>
