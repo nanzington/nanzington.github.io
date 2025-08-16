@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Digressions - Smooth Movement</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>This was asked about in the SadConsole discord, so I figured I'd write up a short guide on how to do it. Apparently "smooth movement" between tiles, rather than teleporting to them. Start with the Chapter 2 code, then make the following adjustments. </p>
+
+    <h1>1. Adjustments</h1>
+    <p>In <b>Data/Renderable</b> make it inherit from ScreenSurface, with <b>: base(1, 1)</b>. This means every entity is actually a ScreenSurface (like a console or window), and as such can use PixelPositioning. Next in <b>UI/UI_GameArea</b> add the following variables to the top of your file.</p>
+    
+    <div class="code_block">
+     int moveDX = 0;
+     int moveDY = 0;
+
+     int moveFinalX = 0;
+     int moveFinalY = 0; 
+    </div>
+ 
+    <p>Next, you have to prepare the Player to be drawn in the new way. Remove the old Player print in Update, then in the UI_GameArea constructor call SquareCon.Children.Add on the Player. Set the Player.Font to GameSettings.SquareFont, Print on the Player at 0,0 the Players appearance, and set Player.UsePixelPositioning to true. This should look like the following:</p>
+
+    <div class="code_block">
+    public UI_GameArea(int width, int height) : base(width, height, "") {
+        Win.IsVisible = true;
+        Win.Position = new Point(0, 0);
+        Win.CanDrag = false;
+
+        SquareCon.Children.Add(GameSettings.World.Player);
+        GameSettings.World.Player.Font = GameSettings.SquareFont;
+        GameSettings.World.Player.Print(0, 0, GameSettings.World.Player.GetAppearance());
+        GameSettings.World.Player.UsePixelPositioning = true;
+    }
+    </div>
+
+    <p>Now in Input, instead of setting the Players X and Y coordinates for a successful move, set moveFinalX to dx * 12, and moveFinalY to dy * 12. This is effectively saying the same thing as the old code, but using the PixelPositioning (which requires we move 12 pixels to move a tile, since that's the size of our font). Additionally, set moveDX and moveDY to 0 here to make sure our movement "buffer" is cleared. Amended Input follows.</p>
+
+    <div class="code_block">
+    public override void Input() {
+        int dx = 0;
+        int dy = 0;
+        if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+        if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+        if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+        if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+        if (dx != 0 || dy != 0) {
+            Tile? dest = GameSettings.World.CurrentMap.TileAt(GameSettings.World.Player.X + dx, GameSettings.World.Player.Y + dy);
+
+            if (dest != null && !dest.BlocksMove) {
+                moveFinalX = dx * 12;
+                moveFinalY = dy * 12;
+
+                moveDX = 0;
+                moveDY = 0;
+                //GameSettings.World.Player.X += dx;
+                //GameSettings.World.Player.Y += dy;
+            }
+        }
+    } 
+    </div>
+
+    <p>Finally in Update we need to change how we draw the player. Before the Con Clears but after the call to DrawBox, we need to do several things. First, check to see if moveFinalX or moveFinalY aren't equal to zero. If so, we've received a movement command. Create local variables for dx and dy, set them to Math.Sign(moveFinalX) * 2, and Math.Sign(moveFinalY) * 2. This function returns a -1 for negative numbers, 0 for zero, and 1 for positive numbers, so we can determine where we're moving <em>to</em> without complicated code. Add dx and dy to moveDX and moveDY, then if both are equal to their respective Final variables, add Math.Sign of moveFinalX and moveFinalY to the respective Player.X and Player.Y. Finally set the four smooth movement variables to zero. Outside the if statements, create a Point with moveDX and moveDY. Then set the Player.Position to X (44 + Player.X) * 12, and Player.Y * 12, plus the new Point you just made with the movement variables. Now if everything went according to plan, you should have a smoothly moving player icon! You can use similar code to move enemies smoothly if desired. Final Update code follows for clarity.</p>
+
+    <div class="code_block">
+    public override void Update() {
+        Win.Clear();
+        Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+        if (moveFinalX != 0 || moveFinalY != 0) {
+            int dx = Math.Sign(moveFinalX) * 2;
+            int dy = Math.Sign(moveFinalY) * 2;
+
+            moveDX += dx;
+            moveDY += dy;
+
+            if (moveDX == moveFinalX && moveDY == moveFinalY) {
+                GameSettings.World.Player.X += Math.Sign(moveFinalX);
+                GameSettings.World.Player.Y += Math.Sign(moveFinalY);
+
+                moveFinalX = 0;
+                moveFinalY = 0;
+                moveDX = 0;
+                moveDY = 0;
+            }
+        }
+        Point tinymove = new Point(moveDX, moveDY);
+
+        GameSettings.World.Player.Position = new Point((44 + GameSettings.World.Player.X) * 12, GameSettings.World.Player.Y * 12) + tinymove;
+
+
+        Con.Clear();
+        SquareCon.Clear();
+        DoubleSquareCon.Clear(); 
+
+        Con.DrawLine(new Point(74, 0), new Point(74, 48), 179);
+
+        for (int x = 0; x < GameSettings.World.CurrentMap.Width; x++) {
+            for (int y = 0; y < GameSettings.World.CurrentMap.Height; y++) {
+                Tile tile = GameSettings.World.CurrentMap.TileAt(x, y);
+
+                if (tile != null) {
+                    SquareCon.Print(44 + x, y, tile.GetAppearance());
+                }
+            }
+        }
+
+        //SquareCon.Print(44 + GameSettings.World.Player.X, GameSettings.World.Player.Y, GameSettings.World.Player.GetAppearance());
+    }
+    </div>
+ 
+    <p> And it should look something like this tiny gif. </p>
+
+    <img src="../resources/Images/smoothment.gif">
+
+    <p>
+    <a href="./02.html">Chapter 07: Items and Inventory</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>
