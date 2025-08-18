@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadTutorial Core 08 - Ranged Scrolls and Targeting</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../simple.css">
+</head>
+<body>
+    <h1>0. Chapter Goals</h1>
+    <p>Just having health potions isn't particularly interesting, so let's add another type of item: scrolls! They work basically the same as potions, but the one we'll be adding (scroll of magic missile) will require being able to target other units. To that end we'll need to expand our Item structure a bit, and we'll have to create a targeting state.</p>
+ 
+    <h1>1. Item Changes</h1>
+    <p>In <b>Data/Item</b> add two new bools: Consumable, and Targeting. Both set to false by default. We'll use consumable to determine whether we should destroy the item after use, and Targeting to activate our upcoming state. In <b>ItemManager</b> add a bool at the top of TryUseItem for whether the item was used, and change the return in heal to setting that bool. Remove the item destruction line, then create a a check at the end of the function to see if used is true and the item is consumable, and remove it only then. Additionally add a second Actor to the function for the target, set to null by default. Finally near the top of the function, create a check to see if item.Targeting is true and target is null (in which case it requires targetting but we're not in the state). If it is and the user is a Player, set player.targetingWith to item and return false. We'll create that variable in a moment. If the user isn't a player and their item requires targeting, just set the target to the Player. Last thing we need is to log the targeting state happening. After this rambling paragraph of changes, TryUseItem should now look like the following:</p>
+
+    <div class="code_block">
+    public static bool TryUseItem(Item item, Actor user, Actor target = null) {
+        bool used = false;
+
+        if (item.Targeting && target == null) {
+            if (user is Player p) {
+                p.targetingWith = item; 
+                GameSettings.UIManager.GameArea.AddMessage("Use " + item.Name + " on what?");
+                return false;
+            } else {
+                target = GameSettings.World.Player;
+            }
+        }
+
+        if (item.UseID == "Heal") {
+            int healAmount = GoRogue.DiceNotation.Dice.Roll(item.UseDice);
+            user.CurrentHP = Math.Clamp(user.CurrentHP + healAmount, 0, user.MaxHP);
+
+            GameSettings.UIManager.GameArea.AddMessage(user.Name + " used " + item.Name + " and healed " + healAmount + "!");
+             
+            used = true;
+        }
+
+
+        if (used) {
+            if (item.Consumable) {
+                user.Inventory.Remove(item);
+            }
+        }
+
+        return used;
+    }
+    </div>
+
+
+    <h1>2. Input changes</h1>
+    <p>In <b>Data/Player</b> we'll simply be adding an Item? variable called targetingWith. Now, in <b>UI/UI_GameArea</b>, add a Point called TargetSpot. This will serve as the position we're trying to target relative to the player. Next let's move to Input, where we're going to make some minor changes. First take the code moving all monsters when the player moves, and pop it out into a standalone function we'll call DoTurn. Any time the player takes an action worthy of the turn passing we'll call this function instead of doing it all manually.</p>
+
+    <p>Next wrap the remaining two lines of the Move block with a check to see if Player.targetingWith isn't null. If it's null, we can direct the movement to the Player as before. When it isn't null though, we want to take the dx and dy and apply them to the targeting cursor instead. Before we leave this section of code, add another hotkey check to Keys.Escape, setting Player.targetingWith to null and resetting Targeting to 0,0. Amended Input follows:</p>
+    
+    <div class="code_block">
+    public override void Input() {
+        int dx = 0;
+        int dy = 0;
+        if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+        if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+        if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+        if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+        if (dx != 0 || dy != 0) {
+            if (GameSettings.World.Player.targetingWith == null) {
+                GameSettings.World.Player.TryMove(dx, dy);
+
+                DoTurn();
+            } else {
+                Targeting += new Point(dx, dy);
+            }
+        }
+
+        if (Shorthands.KeyPressed(Keys.G)) { GameSettings.World.Player.TryPickup(); }
+
+        if (Shorthands.KeyPressed(Keys.Escape)) {
+            GameSettings.World.Player.targetingWith = null;
+            Targeting = new Point(0, 0);
+        }
+    }  
+
+    public void DoTurn() {
+        Point step;
+        int monCount = GameSettings.World.CurrentMap.Monsters.Count;
+        foreach (var mon in GameSettings.World.CurrentMap.Monsters) {
+            if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                step = Lines.GetLine(new Point(mon.X, mon.Y), new Point(GameSettings.World.Player.X, GameSettings.World.Player.Y)).ToList()[1];
+                mon.TryMove(step.X - mon.X, step.Y - mon.Y);
+            }
+
+            if (monCount != GameSettings.World.CurrentMap.Monsters.Count)
+                break;
+        }
+
+        GameSettings.World.UpdateFOV();
+    }
+    </div>
+ 
+    <h1>3. Targeting Information</h1>
+    <p>Next we need to actually show the targeting cursor and communicate with the player that they're in a targeting state. At the end of the Update function check to see if Player.targetingWith isn't null. Then check to see if Shorthands.Time() % 500 is less than 250, and print our Targeting cursor relative to the player if so. This gives us a nice blinking effect to help illustrate where targetting is happening. After that check to see if there's an Actor under the cursor, and print along the top of the window prompting the player to use the targeting item on the Actor.Name, or "on what?" if there's no actor there. Additionally only show the hovered actors name if they're actually in the field of view - no looking out of bounds!</p>
+
+    <div class="code_block">
+    SquareCon.Print(32 + GameSettings.World.Player.X, GameSettings.World.Player.Y, GameSettings.World.Player.GetAppearance());
+
+    if (GameSettings.World.Player.targetingWith != null) {
+        if (Shorthands.Time() % 500 < 250) {
+            SquareCon.Print(32 + GameSettings.World.Player.X + Targeting.X, GameSettings.World.Player.Y + Targeting.Y, "X", Color.Crimson);
+        }
+
+        Point where = new Point(GameSettings.World.Player.X + Targeting.X, GameSettings.World.Player.Y + Targeting.Y);
+
+        Actor? cursor = GameSettings.World.CurrentMap.ActorAt(where.X, where.Y);
+
+        if (cursor != null && GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(where.X, where.Y))) { 
+            Win.Print(56, 0, "Use " + GameSettings.World.Player.targetingWith.Name + " on " + cursor.Name + "?");
+        } else {
+            Win.Print(56, 0, "Use " + GameSettings.World.Player.targetingWith.Name + " on what?");
+        }
+    } 
+    </div>
+
+    <p>Finally hop back to Input and set up a hotkey for when the Player presses Enter, finding the hovered monster and calling TryUseItem on the target.</p>
+
+    <div class="code_block">
+    if (Shorthands.KeyPressed(Keys.Enter)) {
+        Point where = new Point(GameSettings.World.Player.X + Targeting.X, GameSettings.World.Player.Y + Targeting.Y);
+        Actor? cursor = GameSettings.World.CurrentMap.ActorAt(where.X, where.Y);
+
+        if (cursor != null && GameSettings.World.Player.targetingWith != null && GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(where.X, where.Y))) {
+            if (ItemManager.TryUseItem(GameSettings.World.Player.targetingWith, GameSettings.World.Player, cursor)) {
+                Targeting = new Point(0, 0);
+                GameSettings.World.Player.targetingWith = null;
+            }
+        }
+    }
+    </div>
+
+    <h1>4. Making Our Scroll</h1>
+    <p> Just a couple steps left separating us from our goal! First go to <b>ItemManager</b> and add another UseID entry for MagicMissile. It works the same as our Heal item, but they take damage instead. The Actor.TakeDamage function will handle logging the damage dealt, so all you have to log (before that call) is that the user used the item on the target.</p>
+
+    <div class="code_block">
+     if (item.UseID == "MagicMissile") {
+         int damage = GoRogue.DiceNotation.Dice.Roll(item.UseDice);
+         if (target != null) {
+             GameSettings.UIManager.GameArea.AddMessage(user.Name + " used " + item.Name + " on " + target.Name + "!");
+
+             target.TakeDamage(damage, user);
+             used = true;
+         }
+     }
+    </div>
+
+    <p>Next go to <b>Data/Map</b> and when populating the rooms, change from only potions to a switch statement that randomly selects whether to place a potion or a scroll of magic missile. Remember to set Consumable on both, and Targeting on the scroll entry. Set the UseDice for the scroll to whatever you like, though I went with 3d4. </p>
+
+    <div class="code_block">
+    for (int j = 0; j < items; j++) {
+        int x = GameSettings.rand.Next(room.Width) + room.X;
+        int y = GameSettings.rand.Next(room.Height) + room.Y;
+
+        while (TileAt(x, y) == null || TileAt(x, y).BlocksMove || ActorAt(x, y) != null) {
+            x = GameSettings.rand.Next(room.Width) + room.X;
+            y = GameSettings.rand.Next(room.Height) + room.Y;
+        }
+        
+        switch (GameSettings.rand.Next(2)) {
+            case 0: {
+                Item potion = new("Potion of Cure Light Wounds", 168, Color.Crimson, x, y);
+                potion.UseID = "Heal";
+                potion.UseDice = "1d8+1";
+                potion.Consumable = true;
+
+                Items.Add(potion);
+                break;
+            }
+
+            case 1: {
+                Item scroll = new("Scroll of Magic Missile", '?', Color.Turquoise, x, y);
+                scroll.UseID = "MagicMissile";
+                scroll.UseDice = "3d4";
+                scroll.Targeting = true;
+                scroll.Consumable = true;
+
+                Items.Add(scroll);
+                break;
+            }
+        } 
+    }
+    </div>
+     
+    <h1>5. Conclusion</h1>
+    <p>And now, hopefully, if I haven't forgotten any of the myriad steps and explained them well enough, you should be able to find scrolls of magic missile, pick them up, click use, navigate your cursor over an enemy, press enter, and have the scroll consumed as it deals damage to them. It's like magic (missile)!</p>
+
+    <button type="button" class="collapsible">UI/UI_GameArea.cs</button>
+    <div class="hidden_block">  
+    using GoRogue.MapViews;
+    using SadAdditions; 
+    using SadConsole.Input;
+    using SadTutorial.Data;
+    using System.Security.Cryptography;
+    using System.Text;
+
+    namespace SadTutorial.UI {
+        public class UI_GameArea : InstantUI {
+            public List<ColoredString> MessageLog = new();
+
+            public Point Targeting = new();
+
+            public UI_GameArea(int width, int height) : base(width, height, "") {
+                Win.IsVisible = true;
+                Win.Position = new Point(0, 0);
+                Win.CanDrag = false; 
+            }
+
+            public override void Update() {
+                Win.Clear();
+                Extensions.DrawBox(Win, 0, 0, Win.Width - 2, Win.Height - 2);
+
+                Con.Clear();
+                SquareCon.Clear();
+                DoubleSquareCon.Clear();
+
+                // Sidebar
+                Con.Print(1, 0, "Health: " + GameSettings.World.Player.CurrentHP + "/" + GameSettings.World.Player.MaxHP, Color.Crimson);
+
+                Con.DrawLine(new Point(0, 5), new Point(53, 5), 196);
+                Con.Print(0, 6, "Inventory");
+
+                for (int i = 0; i < 20; i++) {
+                    Con.DrawLine(new Point(0, 7 + i), new Point(53, 7 + i), '-', Color.DarkSlateGray);
+                    if (i < GameSettings.World.Player.Inventory.Count) {
+                        Item item = GameSettings.World.Player.Inventory[i];
+                        Con.Print(0, 7 + i, new ColoredString("| ") + new ColoredString(item.Name, item.GetAppearance().First().Foreground, Color.Black));
+
+                        SquareCon.Print(0, 7 + i, item.GetAppearance());
+
+                        bool countChanged = false;
+                        if (item.UseID != "") {
+                            Con.PrintClickable(46, 7 + i, "USE", () => {
+                                if (ItemManager.TryUseItem(item, GameSettings.World.Player)) {
+                                    countChanged = true;
+                                }
+                            });
+                        }
+
+                        Con.PrintClickable(50, 7 + i, "DROP", () => {
+                            if (GameSettings.World.CurrentMap.ItemAt(GameSettings.World.Player.X, GameSettings.World.Player.Y) == null) {
+                                item.X = GameSettings.World.Player.X;
+                                item.Y = GameSettings.World.Player.Y;
+                                GameSettings.World.CurrentMap.Items.Add(item);
+                                GameSettings.World.Player.Inventory.Remove(item);
+                                countChanged = true;
+                            } else {
+                                AddMessage("There's already an item here!");
+                            }
+                        });
+
+                        if (countChanged)
+                            break;
+                    }
+                }
+
+
+                Con.DrawLine(new Point(0, 27), new Point(53, 27), 196);
+
+
+                Con.DrawLine(new Point(0, 35), new Point(53, 35), 196);
+
+                for (int i = 0; i < MessageLog.Count && i < 15; i++) {
+                    Con.Print(0, 36 + i, MessageLog[i]);
+                }
+
+                // End Sidebar
+
+                Con.DrawLine(new Point(54, 0), new Point(54, 48), 179);
+
+                for (int x = 0; x < GameSettings.World.CurrentMap.Width; x++) {
+                    for (int y = 0; y < GameSettings.World.CurrentMap.Height; y++) {
+                        Tile tile = GameSettings.World.CurrentMap.TileAt(x, y);
+
+                        if (tile != null) {
+                            if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(32 + x, y, tile.GetAppearance());
+                            else if (GameSettings.World.SeenTiles.Contains(new GoRogue.Coord(x, y)))
+                                SquareCon.Print(32 + x, y, tile.GetAppearance().GetDarker().GetDarker()); 
+                        }
+                    }
+                }
+
+                foreach (var item in GameSettings.World.CurrentMap.Items) {
+                    if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(item.X, item.Y))) {
+                        SquareCon.Print(32 + item.X, item.Y, item.GetAppearance());
+                    }
+                }
+
+                foreach (var mon in GameSettings.World.CurrentMap.Monsters) {
+                    if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                        SquareCon.Print(32 + mon.X, mon.Y, mon.GetAppearance());
+                    }
+                } 
+
+                SquareCon.Print(32 + GameSettings.World.Player.X, GameSettings.World.Player.Y, GameSettings.World.Player.GetAppearance());
+                
+                if (GameSettings.World.Player.targetingWith != null) {
+                    if (Shorthands.Time() % 500 < 250) {
+                        SquareCon.Print(32 + GameSettings.World.Player.X + Targeting.X, GameSettings.World.Player.Y + Targeting.Y, "X", Color.Crimson);
+                    }
+
+                    Point where = new Point(GameSettings.World.Player.X + Targeting.X, GameSettings.World.Player.Y + Targeting.Y);
+
+                    Actor? cursor = GameSettings.World.CurrentMap.ActorAt(where.X, where.Y);
+
+                    if (cursor != null && GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(where.X, where.Y))) { 
+                        Win.Print(56, 0, "Use " + GameSettings.World.Player.targetingWith.Name + " on " + cursor.Name + "?");
+                    } else {
+                        Win.Print(56, 0, "Use " + GameSettings.World.Player.targetingWith.Name + " on what?");
+                    }
+                } 
+            }
+
+            public override void Input() {
+                int dx = 0;
+                int dy = 0;
+                if (Shorthands.KeyPressed(Keys.W)) { dy = -1; }
+                if (Shorthands.KeyPressed(Keys.S)) { dy = 1;  }
+                if (Shorthands.KeyPressed(Keys.A)) { dx = -1; }
+                if (Shorthands.KeyPressed(Keys.D)) { dx = 1; }
+
+                if (dx != 0 || dy != 0) {
+                    if (GameSettings.World.Player.targetingWith == null) {
+                        GameSettings.World.Player.TryMove(dx, dy);
+
+                        DoTurn();
+                    } else {
+                        Targeting += new Point(dx, dy);
+                    }
+                }
+
+                if (Shorthands.KeyPressed(Keys.G)) { GameSettings.World.Player.TryPickup(); }
+
+                if (Shorthands.KeyPressed(Keys.Escape)) {
+                    GameSettings.World.Player.targetingWith = null;
+                    Targeting = new Point(0, 0);
+                }
+
+                if (Shorthands.KeyPressed(Keys.Enter)) {
+                    Point where = new Point(GameSettings.World.Player.X + Targeting.X, GameSettings.World.Player.Y + Targeting.Y);
+                    Actor? cursor = GameSettings.World.CurrentMap.ActorAt(where.X, where.Y);
+
+                    if (cursor != null && GameSettings.World.Player.targetingWith != null && GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(where.X, where.Y))) {
+                        if (ItemManager.TryUseItem(GameSettings.World.Player.targetingWith, GameSettings.World.Player, cursor)) {
+                            Targeting = new Point(0, 0);
+                            GameSettings.World.Player.targetingWith = null;
+                        }
+                    }
+                }
+            }  
+
+            public void DoTurn() {
+                Point step;
+                int monCount = GameSettings.World.CurrentMap.Monsters.Count;
+                foreach (var mon in GameSettings.World.CurrentMap.Monsters) {
+                    if (GameSettings.World.PlayerFOV.CurrentFOV.Contains(new GoRogue.Coord(mon.X, mon.Y))) {
+                        step = Lines.GetLine(new Point(mon.X, mon.Y), new Point(GameSettings.World.Player.X, GameSettings.World.Player.Y)).ToList()[1];
+                        mon.TryMove(step.X - mon.X, step.Y - mon.Y);
+                    }
+
+                    if (monCount != GameSettings.World.CurrentMap.Monsters.Count)
+                        break;
+                }
+
+                GameSettings.World.UpdateFOV();
+            }
+
+            public void AddMessage(string str) {
+                AddMessage(new ColoredString(str));
+            }
+
+            public void AddMessage(ColoredString str) {
+                MessageLog.Insert(0, str);
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Map.cs</button>
+    <div class="hidden_block">  
+     namespace SadTutorial.Data {
+        public class Map {
+            public Tile[] Tiles;
+            public int Width;
+            public int Height;
+
+            public List<Actor> Monsters = new();
+            public List<Item> Items = new();
+            public List<Rectangle> Rooms = new();
+
+            public Map(int width, int height) {
+                Tiles = new Tile[width * height];
+                Width = width;
+                Height = height; 
+
+                for (int i = 0; i < Tiles.Length; i++) {
+                    Tiles[i] = new Tile("Stone Wall", '#', Color.DimGray, true, true);
+                }
+
+                for (int i = 0; i < 10; i++) {
+                    int roomWidth = GameSettings.rand.Next(10) + 3;
+                    int roomHeight = GameSettings.rand.Next(10) + 3;
+
+                    int roomX = GameSettings.rand.Next(Width - roomWidth - 2) + 1;
+                    int roomY = GameSettings.rand.Next(Height - roomHeight - 2) + 1;
+
+                    Rectangle newRoom = new Rectangle(roomX, roomY, roomWidth, roomHeight);
+                     
+                    while (true) {
+                        bool intersects = false;
+
+                        foreach (Rectangle room in Rooms) {
+                            if (room.Intersects(newRoom)) {
+                                intersects = true;
+                            }
+                        }
+
+                        if (!intersects)
+                            break; 
+
+                        roomX = GameSettings.rand.Next(Width - roomWidth - 2) + 1;
+                        roomY = GameSettings.rand.Next(Height - roomHeight - 2) + 1;
+
+                        newRoom = new Rectangle(roomX, roomY, roomWidth, roomHeight);
+                    } 
+
+                    Rooms.Add(newRoom);
+                    ApplyRoom(newRoom);
+
+                    PopulateRoom(Rooms[i]);
+                }
+                
+                for (int i = 0; i < Rooms.Count - 1; i++) {
+                    ApplyLine(Lines.GetLine(Rooms[i].Center, new Point(Rooms[i].Center.X, Rooms[i+1].Center.Y)).ToList());
+                    ApplyLine(Lines.GetLine(Rooms[i+1].Center, new Point(Rooms[i].Center.X, Rooms[i+1].Center.Y)).ToList());
+                      
+                }
+            }
+
+            public void PopulateRoom(Rectangle room) {
+                int monsters = GameSettings.rand.Next(5);
+
+                for (int j = 0; j < monsters; j++) {
+                    int x = GameSettings.rand.Next(room.Width) + room.X;
+                    int y = GameSettings.rand.Next(room.Height) + room.Y;
+
+                    while (TileAt(x, y) == null || TileAt(x, y).BlocksMove || ActorAt(x, y) != null) {
+                        x = GameSettings.rand.Next(room.Width) + room.X;
+                        y = GameSettings.rand.Next(room.Height) + room.Y;
+                    }
+
+                    Actor goblin = new("Goblin", 'g', Color.LimeGreen, x, y);
+                    goblin.SetStats(5, "1d2-1");
+
+                    Monsters.Add(goblin);
+                }
+
+                int items = GameSettings.rand.Next(3);
+
+                for (int j = 0; j < items; j++) {
+                    int x = GameSettings.rand.Next(room.Width) + room.X;
+                    int y = GameSettings.rand.Next(room.Height) + room.Y;
+
+                    while (TileAt(x, y) == null || TileAt(x, y).BlocksMove || ActorAt(x, y) != null) {
+                        x = GameSettings.rand.Next(room.Width) + room.X;
+                        y = GameSettings.rand.Next(room.Height) + room.Y;
+                    }
+                    
+                    switch (GameSettings.rand.Next(2)) {
+                        case 0: {
+                            Item potion = new("Potion of Cure Light Wounds", 168, Color.Crimson, x, y);
+                            potion.UseID = "Heal";
+                            potion.UseDice = "1d8+1";
+                            potion.Consumable = true;
+
+                            Items.Add(potion);
+                            break;
+                        }
+
+                        case 1: {
+                            Item scroll = new("Scroll of Magic Missile", '?', Color.Turquoise, x, y);
+                            scroll.UseID = "MagicMissile";
+                            scroll.UseDice = "3d4";
+                            scroll.Targeting = true;
+                            scroll.Consumable = true;
+
+                            Items.Add(scroll);
+                            break;
+                        }
+                    } 
+                }
+            }
+
+            public void ApplyLine(List<Point> positions) {
+                for (int i = 0; i < positions.Count(); i++) {
+                    Point pos = positions[i];
+
+                    if (pos.X >= 0 && pos.X < Width && pos.Y >= 0 && pos.Y < Height) {
+                        Tiles[pos.X + pos.Y * Width] = new Tile("Stone Floor", '.', Color.Gray, false, false);
+                    }
+                }
+            }
+
+            public void ApplyRoom(Rectangle rect) {
+                for (int x = rect.X; x < rect.X + rect.Width; x++) {
+                    for (int y = rect.Y; y < rect.Y + rect.Height; y++) {
+                        if (x >= 0 && x < Width && y >= 0 && y < Height) {
+                            Tiles[x + y * Width] = new Tile("Stone Floor", '.', Color.Gray, false, false);
+                        }
+                    }
+                }
+            }
+
+            public Point RandomRoomCenter() {
+                return Rooms[GameSettings.rand.Next(Rooms.Count)].Center; 
+            }
+
+            public Tile? TileAt(int x, int y) {
+                if (x >= 0 && x < Width && y >= 0 && y < Height) {
+                    return Tiles[x + y * Width];
+                }
+                return null;
+            }
+
+            public Item? ItemAt(int x, int y) {
+                foreach (var mon in Items) {
+                    if (mon.X == x && mon.Y == y) return mon;
+                } 
+
+                return null;
+            }
+
+            public Actor? ActorAt(int x, int y) {
+                foreach (var mon in Monsters) {
+                    if (mon.X == x && mon.Y == y) return mon;
+                }
+                 
+                if (GameSettings.World != null && GameSettings.World.Player != null && 
+                    GameSettings.World.Player.X == x && GameSettings.World.Player.Y == y) 
+                    return GameSettings.World.Player; 
+
+                return null;
+            } 
+        }
+    }
+
+    </div>
+
+    <button type="button" class="collapsible">ItemManager.cs</button>
+    <div class="hidden_block">  
+     using SadTutorial.Data;
+
+    namespace SadTutorial {
+        public static class ItemManager {
+            public static bool TryUseItem(Item item, Actor user, Actor target = null) {
+                bool used = false;
+
+                if (item.Targeting && target == null) {
+                    if (user is Player p) {
+                        p.targetingWith = item; 
+                        GameSettings.UIManager.GameArea.AddMessage("Use " + item.Name + " on what?");
+                        return false;
+                    } else {
+                        target = GameSettings.World.Player;
+                    }
+                }
+
+                if (item.UseID == "Heal") {
+                    int healAmount = GoRogue.DiceNotation.Dice.Roll(item.UseDice);
+                    user.CurrentHP = Math.Clamp(user.CurrentHP + healAmount, 0, user.MaxHP);
+
+                    GameSettings.UIManager.GameArea.AddMessage(user.Name + " used " + item.Name + " and healed " + healAmount + "!");
+                     
+                    used = true;
+                }
+
+                if (item.UseID == "MagicMissile") {
+                    int damage = GoRogue.DiceNotation.Dice.Roll(item.UseDice);
+                    if (target != null) {
+                        GameSettings.UIManager.GameArea.AddMessage(user.Name + " used " + item.Name + " on " + target.Name + "!");
+
+                        target.TakeDamage(damage, user);
+                        used = true;
+                    }
+                }
+
+
+                if (used) {
+                    if (item.Consumable) {
+                        user.Inventory.Remove(item);
+                    }
+                }
+
+                return used;
+            }
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Player.cs</button>
+    <div class="hidden_block">  
+    namespace SadTutorial.Data {
+        public class Player : Actor {
+            public Item? targetingWith;
+
+            public Player(string name, int x, int y) : base(name, '@', Color.White, x, y) {
+            } 
+        }
+    } 
+    </div>
+
+    <button type="button" class="collapsible">Data/Item.cs</button>
+    <div class="hidden_block">  
+    namespace SadTutorial.Data {
+        public class Item : Entity {
+            public string UseID = "";
+            public string UseDice = "";
+
+            public bool Consumable = false;
+            public bool Targeting = false;
+
+            public Item(string n, int g, Color c, int x, int y) : base(n, g, c, x, y) {
+            }
+        }
+    } 
+    </div>
+ 
+    <p>
+    <a href="./07.html">Chapter 07: Items and Inventory</a>
+    <br> 
+    <a href="./09.html">Chapter 09: TBD</a>
+    <br>
+    <a href="../index.html">Back to Index</a></p>
+    <script src="../javascript.js"></script>
+</body>
+</html>
